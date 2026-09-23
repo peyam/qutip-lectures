@@ -36,7 +36,7 @@
 AIW-Rx is a standalone, real-time software-defined-radio receiver. It replaces the GNU Radio
 flowgraph `hwil_conventional_evaluation_rx.grc` with a single native binary that has no GNU Radio
 or Python runtime dependency. It receives a 256-QAM, Reed–Solomon-protected, unique-word-framed
-burst stream from an Ettus USRP, decodes it, and measures link quality (bit error rate before and
+burst stream from an Ettus USRP (reference hardware: **USRP B210 over USB 3.0**), decodes it, and measures link quality (bit error rate before and
 after FEC, SNR, MER) against a known ground-truth payload.
 
 This document describes how the software is structured and why. It is written for engineers who
@@ -76,7 +76,7 @@ External interfaces:
 
 | Interface | Direction | Format | Notes |
 | --- | --- | --- | --- |
-| USRP via UHD | In | Complex float32 (`fc32`) over `sc16` wire format | Continuous streaming, 8192-sample `recv` calls |
+| USRP via UHD | In | Complex float32 (`fc32`) over `sc16` wire format | B210 on USB 3.0 (≈ 5.6 MB/s at 1.4 MSps); continuous streaming, 8192-sample `recv` calls |
 | Capture file | In | Raw interleaved complex float32, 1.4 MSps | Same format as `rx_samples_to_file --type float` or a GNU Radio file sink |
 | Console | Out | One status line per interval, final summary | Suppressed with `--quiet` |
 | CSV | Out | One row per interval, 20 columns | `--csv PATH` |
@@ -409,6 +409,17 @@ creates an `fc32`/`sc16` streamer and starts continuous streaming. `read()` loop
 until a full 8192-sample chunk is collected. Overflow metadata (`O`) is counted, timeouts are
 tolerated, and other errors are logged.
 
+B210-specific behaviour (the reference radio):
+
+| Aspect | Behaviour |
+| --- | --- |
+| Device selection | `--args` is passed straight to `multi_usrp::make`. B210s report `type=b200`, so `serial=…` or `type=b200,serial=…` both select one |
+| Transport | USB 3.0 (USB 2.0 works). UHD loads `usrp_b200_fw.hex` and `usrp_b210_fpga.bin` on open, which takes a few seconds after power-up |
+| Channel | Stream channel 0 = RF A unless `--subdev` is given (`A:B` = RF B). Antenna `RX2` by default |
+| Rate | UHD picks the AD9361 master clock for 1.4 MSps. The adapter compares `get_rx_rate()` with the request and warns on mismatch |
+| Gain | B210 receive range 0–76 dB. UHD coerces out-of-range requests; the adapter logs, and the dashboard shows, `get_rx_gain()`, i.e. the actual value |
+| LO lock | The `lo_locked` sensor exists on the B210 and is waited on for up to 1 s |
+
 ### 9.2 Transmitter simulator (`src/tx_simulator.cpp`)
 
 The simulator is a reference implementation of the transmitter. It builds the frame (UW, the
@@ -588,7 +599,7 @@ Nothing on the data path allocates after the first few chunks. The only exceptio
 | Loopback | Full DSP chain driven single-threaded from the simulator: clean channel; 38 dB + 400 Hz + 10 ppm + echo (BER 0, < 8 corrections/block, segment spacing checked every frame); 29 dB (RS actively correcting) | `tests/test_main.cpp` |
 | System | `aiw_rx --source sim --expect-ber0` through the real threaded pipeline | CTest `rx_sim_end_to_end` |
 | UI | Headless Chromium (Playwright): layout at 1440 px and 390 px, both colour schemes, tooltips, controls, no JS errors | Manual, recorded in the PR |
-| Hardware | UHD ingestion without overflow; retuning; zero BER on the lab link | **Outstanding:** requires the USRP |
+| Hardware | UHD ingestion from the B210 over USB 3.0 without overflow; retuning; zero BER on the lab link | **Outstanding:** requires the B210 |
 
 Mapping to the specification's verification gates (§9 of the spec):
 
@@ -649,7 +660,10 @@ Mapping to the specification's verification gates (§9 of the spec):
    not been measured.
 6. **The dashboard has no authentication.** Keep the default loopback binding unless the network
    is trusted.
-7. **CFO range is ±5.47 kHz.** Larger offsets (about 6 ppm at 917 MHz) need an external
+7. **Dashboard gain range vs. the B210.** The control accepts 0–89 dB (the specification's range, which
+   matches the B210's *transmit* range). The B210's receive range is 0–76 dB; UHD clips higher values and
+   the dashboard displays the actual gain.
+8. **CFO range is ±5.47 kHz.** Larger offsets (about 6 ppm at 917 MHz) need an external
    reference or a coarse acquisition stage.
 
 ---

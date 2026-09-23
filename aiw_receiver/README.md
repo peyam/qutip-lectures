@@ -70,10 +70,25 @@ tested:
    ```
 4. Put `C:\Program Files\UHD\bin` (`uhd.dll`) on `PATH` before running `build\Release\aiw_rx.exe`.
 
+## Hardware: USRP B210 over USB
+
+The reference radio is an **Ettus USRP B210** connected over **USB 3.0**:
+- **RF:** feed the signal to **RF A → RX2**, with an attenuator for cabled tests.
+- **Power:** use the supplied 6 V adapter.
+- **Host software:** once per host, install the images with `sudo uhd_images_downloader -t b2xx`. On
+  Linux, `uhd-host` installs the USB permission rule; on Windows, the UHD installer provides the
+  WinUSB driver.
+- **Check:** `uhd_usrp_probe --args type=b200` should report `Detected Device: B210` and
+  `Operating over USB 3.`
+
+Step-by-step instructions are in [Installation §E](docs/INSTALLATION.md#e-set-up-the-usrp-b210-usb),
+operation in [User manual §5.1](docs/USER_MANUAL.md#51-live-reception-from-the-usrp-b210), and
+B210 problems in [Troubleshooting](docs/USER_MANUAL.md#10-troubleshooting).
+
 ## Run
 
 ```sh
-./build/aiw_rx                                        # USRP serial=3273A14, 917 MHz, 45 dB
+./build/aiw_rx                                        # USRP B210 serial=3273A14 (USB 3.0), RF A/RX2, 917 MHz, 45 dB
 ./build/aiw_rx --freq 915e6 --gain 40 --csv run.csv   # per-second metrics to CSV
 ./build/aiw_rx --source file --file capture.fc32      # raw interleaved complex float32 capture
 ./build/aiw_rx --source sim --realtime                # built-in transmitter and channel model
@@ -188,7 +203,7 @@ back to the literal spec behavior from the command line.
    lead-to-trail phase over 359 symbols) and de-rotates the segment. Pass 2 is the LLS equalizer plus
    residual phase removal. `--no-cfo` disables pass 1.
 9. **The subdevice defaults to the device's own.** The spec's `"0:A"` is not valid UHD subdev
-   syntax; pass `--subdev A:A` (B2xx) or similar if needed.
+   syntax. On the reference B210 the default is channel RF A (`A:A`); pass `--subdev A:B` for RF B.
 10. **The first 16 frames are excluded from BER** (`--warmup-frames`), about 22 ms while the AGC and
     timing loop converge. They are counted and reported separately.
 

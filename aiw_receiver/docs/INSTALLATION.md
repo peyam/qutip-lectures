@@ -13,7 +13,7 @@ This guide covers four ways to get a working `aiw_rx`:
 | [C. Prebuilt Windows binary](#c-prebuilt-windows-binary) | Windows 10/11 x86-64 | **No** (simulator and files only) | Minutes |
 | [D. Build on Windows with Visual Studio](#d-build-on-windows-with-visual-studio-usrp-support) | Windows 10/11 x86-64 | Yes | ~1 hour, untested |
 
-Then continue with [Set up the USRP](#e-set-up-the-usrp) and [Verify the installation](#f-verify-the-installation).
+Then continue with [Set up the USRP B210](#e-set-up-the-usrp-b210-usb) and [Verify the installation](#f-verify-the-installation).
 
 ---
 
@@ -24,8 +24,8 @@ Then continue with [Set up the USRP](#e-set-up-the-usrp) and [Verify the install
 | CPU | 64-bit x86, 2 cores | 4 cores recommended; the receiver runs five worker threads |
 | RAM | 256 MB free | The receiver itself uses about 25 MB |
 | OS | Ubuntu 24.04 LTS (prebuilt) · any Linux with GCC ≥ 11 or Clang ≥ 14 (source) · Windows 10/11 | |
-| Radio | Ettus USRP supported by UHD 4.x (configured default: serial `3273A14`, antenna RX2) | Not needed for the simulator or for file playback |
-| Connection | USB 3.0 port (B2xx series) or Gigabit Ethernet (N2xx/X3xx series) | USB 2.0 works at 1.4 MSps but has less margin |
+| Radio | **Ettus USRP B210** (reference hardware; default serial `3273A14`, RF A / RX2). Any UHD 4.x USRP works | Not needed for the simulator or for file playback |
+| Connection | USB 3.0 (SuperSpeed) port and the B210's USB 3.0 cable; B210 6 V DC adapter recommended | USB 2.0 works at 1.4 MSps but has less margin. Ethernet USRPs: Gigabit Ethernet |
 | Browser | Any current Chrome, Edge, Firefox or Safari | Only for the `--ui` dashboard |
 
 ---
@@ -65,7 +65,7 @@ code, so it runs on any 64-bit Intel or AMD PC with Ubuntu 24.04 or newer (glibc
 
 On Ubuntu 22.04 or older the binary fails with a `GLIBC_2.38 not found` error. Use route B there.
 
-Continue with [Set up the USRP](#e-set-up-the-usrp).
+Continue with [Set up the USRP B210](#e-set-up-the-usrp-b210-usb).
 
 ---
 
@@ -141,7 +141,7 @@ The package `aiw_rx-windows-x86_64.zip` contains `bin\aiw_rx.exe`, `bin\aiw_test
 `INSTALL.txt` and `README.md`. The programs are statically linked and need no installer and no
 extra DLLs.
 
-> **Limitation:** this build cannot use a USRP. It runs the built-in simulator
+> **Limitation:** this build cannot use a USRP, including the B210. It runs the built-in simulator
 > (`--source sim`) and decodes recorded capture files (`--source file`). For live reception on
 > Windows, use [route D](#d-build-on-windows-with-visual-studio-usrp-support), or run on Linux.
 
@@ -173,7 +173,8 @@ prompt, if one appears, can be cancelled.
    uhd_find_devices
    ```
 
-   For USB devices, also install the UHD USB driver that the UHD installer provides.
+   For the B210 (USB), also install the WinUSB driver that the UHD installer provides (see
+   [E.3](#e3-allow-access-to-the-usb-device)).
 3. Install **Eigen** and the **Boost headers** that match your UHD version, for example with
    vcpkg:
 
@@ -209,55 +210,148 @@ cmake --build build-win -j
 
 ---
 
-## E. Set up the USRP
+## E. Set up the USRP B210 (USB)
 
-Skip this section if you only use the simulator or capture files.
+The reference radio is an **Ettus USRP B210** (the default device arguments name its serial,
+`3273A14`) connected over **USB 3.0**. Skip this section if you only use the simulator or capture
+files. Other UHD 4.x USRPs also work; Ethernet-connected models are covered at the end of this
+section.
 
-1. **Download the FPGA and firmware images** (once per UHD installation):
+### E.1 Connect the hardware
 
-   ```sh
-   sudo uhd_images_downloader
-   ```
+```
+ AIW transmitter ──RF cable + attenuator (or antenna)──▶ B210 "RF A: RX2" (SMA)
+                                                         B210 USB 3.0 (micro-B) ──USB 3.0 cable──▶ PC USB 3.0 port
+                                                         B210 6 V DC input ◀── supplied power adapter (recommended)
+```
 
-2. **Linux, USB devices only: allow non-root access.** The Ubuntu `uhd-host` package installs
-   the udev rule for you (`/usr/lib/udev/rules.d/60-uhd-host.rules`); just unplug and replug the
-   USRP once after installing it. If you built UHD from source instead, install the rule manually:
+1. **RF input:** connect the signal to the **RX2** SMA port of channel **A** (labelled *RF A*).
+   That is the port `aiw_rx` uses by default (antenna `RX2`, channel 0 = RF A).
+   > **Protect the receiver.** For cabled tests, never connect a transmitter output straight to the
+   > B210. Put enough attenuation in the line to keep the level at RX2 well below the maximum input
+   > power in the Ettus B210 datasheet. A strong signal can also overload the receiver without
+   > damaging it, and then the constellation smears and the BER rises; see
+   > [setting the RF gain](USER_MANUAL.md#92-setting-the-rf-gain).
+2. **USB:** use a **USB 3.0 (SuperSpeed) port**, usually blue or marked *SS*, and the USB 3.0
+   cable supplied with the B210. Plug it straight into the PC, not through a hub or a long extension
+   cable. At 1.4 MSps the data rate is only about 5.6 MB/s, so USB 2.0 also works, but USB 3.0 gives
+   more headroom and more stable power.
+3. **Power:** the B210 can run from USB bus power, but for reliable operation connect the supplied
+   **6 V DC adapter**. Always use it on USB 2.0 ports, or if the device resets or reports USB
+   transfer errors.
 
-   ```sh
-   sudo cp /usr/libexec/uhd/utils/uhd-usrp.rules /etc/udev/rules.d/
-   sudo udevadm control --reload-rules && sudo udevadm trigger
-   ```
+### E.2 Install the FPGA and firmware images
 
-3. **Linux, Ethernet devices only:** give the host NIC a static address on the USRP's subnet
-   (the factory default is `192.168.10.1`, so use e.g. `192.168.10.2/24`), and raise the socket
-   buffers:
+UHD loads firmware and an FPGA image into the B210 each time it is opened, so the image files must
+be installed on the host. Once per UHD installation:
 
-   ```sh
-   sudo sysctl -w net.core.rmem_max=33554432 net.core.wmem_max=33554432
-   ```
+```sh
+sudo uhd_images_downloader -t b2xx      # only the B2xx images (a few MB)
+# or: sudo uhd_images_downloader        # all USRP images
+```
 
-4. **Find the device:**
+This installs `usrp_b200_fw.hex` (firmware shared by the B2xx series) and `usrp_b210_fpga.bin`
+into `/usr/share/uhd/images`. To keep images elsewhere, set the `UHD_IMAGES_DIR` environment
+variable. On Windows, run `uhd_images_downloader` from a command prompt; the UHD installer adds it
+to `PATH`.
 
-   ```sh
-   uhd_find_devices
-   ```
+### E.3 Allow access to the USB device
 
-   The listing should include `serial: 3273A14`. If your unit has a different serial, pass it
-   with `--args serial=<yours>` (see the [User manual](USER_MANUAL.md#4-command-line-reference)).
+* **Linux:** the Ubuntu `uhd-host` package installs a udev rule
+  (`/usr/lib/udev/rules.d/60-uhd-host.rules`) that lets any user open Ettus USB devices, the B210
+  included (USB ID `2500:0020`). After installing `uhd-host`, **unplug and replug the B210 once**.
+  Check that the system sees it:
 
-5. **Check streaming at the receiver's rate** (optional but recommended):
+  ```sh
+  lsusb | grep -i 2500          # e.g. "ID 2500:0020 Ettus Research LLC USRP B200"
+  ```
 
-   ```sh
-   /usr/libexec/uhd/examples/benchmark_rate --args serial=3273A14 --rx_rate 1.4e6 --duration 30
-   ```
+  The B200 and B210 share this USB ID, so seeing "B200" here is normal. If you built UHD from
+  source, install the rule yourself:
 
-   The report should show zero overflows and zero dropped samples.
+  ```sh
+  sudo cp /usr/libexec/uhd/utils/uhd-usrp.rules /etc/udev/rules.d/
+  sudo udevadm control --reload-rules && sudo udevadm trigger
+  ```
 
-6. **Performance settings** (recommended for long runs):
+  Without the rule, UHD reports `USB open failed: insufficient permissions.`
+* **Windows:** the B210 needs the WinUSB driver that comes with the UHD installer. If Device Manager
+  lists the B210 under *Other devices* with a warning icon, choose **Update driver → Browse my
+  computer** and point it at the USB driver folder of the UHD installation (see Ettus's Windows
+  installation notes).
+* **Virtual machines / WSL:** the B210 must be passed through as a **USB 3.0** device. USB
+  passthrough to VMs and to WSL2 (e.g. with `usbipd-win`) often limits throughput or drops the
+  device during firmware loading. A native Linux install is strongly recommended. These setups have
+  not been tested.
 
-   ```sh
-   sudo cpupower frequency-set -g performance      # or set the governor in your BIOS/OS
-   ```
+### E.4 Find and probe the B210
+
+```sh
+uhd_find_devices
+```
+
+Expected output (the name field may be empty):
+
+```
+--------------------------------------------------
+-- UHD Device 0
+--------------------------------------------------
+Device Address:
+    serial: 3273A14
+    name:
+    product: B210
+    type: b200
+```
+
+B210s report `type: b200`, because the B200 and B210 share a driver. Then open the device fully.
+This loads firmware and FPGA, which takes a few seconds on the first open after power-up:
+
+```sh
+uhd_usrp_probe --args "type=b200,serial=3273A14"
+```
+
+In the log, check for `Detected Device: B210` and **`Operating over USB 3.`** (`USB 2.` means the
+cable or port is only running at USB 2.0; see E.1). The probe tree lists the board as `Mboard: B210`,
+with RX frontends *A* and *B*.
+
+If your unit has a different serial number, use it everywhere below, and pass it to `aiw_rx` with
+`--args "serial=<yours>"` (see the [User manual](USER_MANUAL.md#51-live-reception-from-the-usrp-b210)).
+
+### E.5 Check streaming at the receiver's rate
+
+```sh
+/usr/libexec/uhd/examples/benchmark_rate --args "type=b200,serial=3273A14" --rx_rate 1.4e6 --duration 30
+```
+
+The summary should show **0 overflows** (`O`) and **0 dropped samples**. UHD picks the B210's master
+clock rate automatically for 1.4 MSps and logs `Asking for clock rate … MHz`. That is expected.
+
+### E.6 First reception with aiw_rx
+
+With the transmitter on:
+
+```sh
+aiw_rx --duration 20
+```
+
+At start-up `aiw_rx` prints the device, actual rate, frequency, gain and antenna, and `LO locked`.
+Within a second the status line should show about 697 frames/s. If it doesn't, work through
+[Troubleshooting](USER_MANUAL.md#10-troubleshooting). For long runs, set the CPU governor to
+performance:
+
+```sh
+sudo cpupower frequency-set -g performance      # or the equivalent BIOS/OS power setting
+```
+
+### E.7 Other USRPs (Ethernet models)
+
+`aiw_rx` works with any UHD 4.x USRP. Pass its address with `--args` (e.g. `--args addr=192.168.10.2`).
+For Ethernet models (N2xx, X3xx), give the host NIC a static address on the USRP's subnet (the
+factory default is `192.168.10.x`), and raise the socket buffers:
+
+```sh
+sudo sysctl -w net.core.rmem_max=33554432 net.core.wmem_max=33554432
+```
 
 ---
 
@@ -270,9 +364,10 @@ Run these checks in order. Each one exercises more of the system than the last.
 | 1 | `aiw_tests` | Last line `2408 checks, 0 failures` (the count may grow in later versions) |
 | 2 | `aiw_rx --source sim --sim-seconds 3 --expect-ber0` | Summary shows `post-FEC BER 0`; exit code 0 |
 | 3 | `aiw_rx --source sim --ui` then open <http://localhost:8080> | Dashboard shows **Receiving**, about 700 frames/s |
-| 4 | `aiw_rx --duration 10` with the transmitter on | Frames decoded, `USRP overflows 0`, `dropped chunks 0` |
+| 4 | `uhd_usrp_probe --args type=b200` | `Detected Device: B210`, `Operating over USB 3.` |
+| 5 | `aiw_rx --duration 10` with the transmitter on | ≈ 697 frames/s, `USRP overflows 0`, `dropped chunks 0` |
 
-If check 4 fails, see [Troubleshooting](USER_MANUAL.md#10-troubleshooting) in the user manual.
+If check 4 or 5 fails, see [Troubleshooting](USER_MANUAL.md#10-troubleshooting) in the user manual.
 
 ---
 

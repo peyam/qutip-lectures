@@ -25,7 +25,8 @@
 
 ## 1. Introduction
 
-AIW-Rx (`aiw_rx`) receives the AIW 256-QAM test signal from an Ettus USRP, decodes it, and
+AIW-Rx (`aiw_rx`) receives the AIW 256-QAM test signal from an Ettus USRP (the reference radio is a
+**USRP B210 on USB 3.0**), decodes it, and
 reports link quality in real time. Every frame carries the same known 200-byte payload, so the
 receiver can count exactly how many bits arrive wrong, both before and after Reed–Solomon error
 correction.
@@ -57,7 +58,8 @@ aiw_rx --source sim --ui
 Open <http://localhost:8080>. The dashboard should show **Receiving** at about 700 frames per
 second with a post-FEC BER of 0. Press **Ctrl+C** in the terminal to stop.
 
-**Receive from the USRP** (transmitter on, 917 MHz, default gain 45 dB):
+**Receive from the USRP B210** (set up as in [Installation §E](INSTALLATION.md#e-set-up-the-usrp-b210-usb); transmitter
+on; RF A / RX2, 917 MHz, default gain 45 dB):
 
 ```sh
 aiw_rx --ui
@@ -111,11 +113,11 @@ the BER figures, while the gain control and timing recovery settle. The summary 
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--args STR` | `serial=3273A14` | UHD device arguments (e.g. `serial=31XXXXX`, `addr=192.168.10.2`) |
-| `--subdev STR` | device default | RX subdevice spec, e.g. `A:A` on a B2xx |
-| `--antenna STR` | `RX2` | RX antenna port |
-| `--freq HZ` | `917e6` | RF centre frequency (70 MHz – 6 GHz, depending on the USRP) |
-| `--gain DB` | `45` | RF gain (0–89 dB on most B2xx units) |
+| `--args STR` | `serial=3273A14` | UHD device arguments. B210: `serial=<serial>` or `type=b200,serial=<serial>`; Ethernet USRPs: `addr=192.168.10.2` |
+| `--subdev STR` | device default | RX subdevice spec. B210: `A:A` = RF A (the default), `A:B` = RF B |
+| `--antenna STR` | `RX2` | RX antenna port. B210: `RX2` or `TX/RX` |
+| `--freq HZ` | `917e6` | RF centre frequency (B210: 70 MHz – 6 GHz) |
+| `--gain DB` | `45` | RF gain. **B210 receive range: 0–76 dB**; higher values are clipped to 76 by UHD |
 | `--rate SPS` | `1.4e6` | Sample rate. **Leave at 1.4e6:** the filters are designed for it |
 
 ### 4.3 Receiver processing
@@ -179,17 +181,50 @@ the BER figures, while the gain control and timing recovery settle. The summary 
 
 ## 5. Operating modes
 
-### 5.1 Live reception from the USRP
+### 5.1 Live reception from the USRP B210
+
+The reference radio is an Ettus **USRP B210** on **USB 3.0**. The
+[Installation guide](INSTALLATION.md#e-set-up-the-usrp-b210-usb) covers first-time setup
+(images, USB permissions, driver, probe). Before each session:
+
+1. Connect the signal to **RF A → RX2**, with an attenuator for cabled tests.
+2. Connect USB 3.0 straight to the PC, and preferably the 6 V adapter.
+3. Check that `uhd_find_devices` lists `product: B210`.
+
+Then:
 
 ```sh
-aiw_rx                                   # all defaults
-aiw_rx --args serial=31AB123 --freq 915e6 --gain 38
+aiw_rx                                                  # B210 serial 3273A14, RF A / RX2, 917 MHz, 45 dB
+aiw_rx --args "serial=31AB123" --freq 915e6 --gain 38   # a different B210
+aiw_rx --args "type=b200" --ui                          # the only B2xx plugged in, with the dashboard
+aiw_rx --subdev A:B                                     # use RF B instead of RF A
+aiw_rx --antenna TX/RX                                  # receive on the TX/RX port of RF A
 ```
 
-At start-up the receiver prints the device description, the actual rate, frequency, gain and
-antenna, and whether the LO locked. It then streams until you press Ctrl+C or `--duration`
-expires. If a queue fills because the computer cannot keep up, whole chunks are dropped and
-counted, so the receiver never falls progressively behind the radio.
+| B210 setting | Value used by aiw_rx | Notes |
+| --- | --- | --- |
+| Channel / port | RF A (`A:A`), RX2 | `--subdev A:B` for RF B; `--antenna TX/RX` for the other port |
+| Sample rate | 1.4 MSps | UHD chooses the master clock itself (`Asking for clock rate … MHz`). `aiw_rx` warns if the actual rate differs |
+| Frequency | 917 MHz | B210 range 70 MHz – 6 GHz |
+| RF gain | 45 dB | B210 receive range 0–76 dB. The dashboard accepts up to 89 dB (the specification's range), but UHD clips to 76 dB, and the header shows the actual gain |
+| Wire format | `sc16` over USB, delivered as complex float32 | About 5.6 MB/s at 1.4 MSps |
+
+A normal start-up looks like this (UHD's own lines are abbreviated):
+
+```
+[INFO] [B200] Detected Device: B210
+[INFO] [B200] Operating over USB 3.
+[INFO] [B200] Asking for clock rate … MHz...
+[usrp] Single USRP: Device: B-Series Device  Mboard 0: B210 ...
+[usrp] rate 1.4 MSps, freq 917 MHz, gain 45 dB, antenna RX2
+[usrp] LO locked
+[aiw_rx] source: usrp:serial=3273A14  UW length 143, segment 502 symbols
+```
+
+Streaming runs until you press Ctrl+C or `--duration` expires. If a queue fills because the
+computer can't keep up, whole chunks are dropped and counted (`DROPPED`), so the receiver never
+falls progressively behind the radio. Overflows inside UHD or on USB show as `O`. With `--ui`,
+the dashboard's **Controls** retune the B210's frequency and gain while it receives.
 
 ### 5.2 Recording and replaying captures
 
@@ -197,7 +232,7 @@ Record 10 seconds with UHD's example tool. `--type float` gives the complex-floa
 AIW-Rx expects:
 
 ```sh
-/usr/libexec/uhd/examples/rx_samples_to_file --args serial=3273A14 --freq 917e6 \
+/usr/libexec/uhd/examples/rx_samples_to_file --args "type=b200,serial=3273A14" --freq 917e6 \
     --rate 1.4e6 --gain 45 --ant RX2 --type float --duration 10 --file capture.fc32
 ```
 
@@ -428,7 +463,7 @@ no password. Use it only on an isolated lab network.
 
 Too little gain loses SNR; too much overloads the receiver and distorts the constellation.
 
-1. Start with `--ui` at the default 45 dB.
+1. Start with `--ui` at the default 45 dB. On the B210 the usable range is 0–76 dB.
 2. Raise the gain in steps of 3 dB until MER stops improving, then back off 3–6 dB.
 3. On the spectrum, the signal peak should stay well below 0 dBFS; around −20 dBFS or lower is
    comfortable.
@@ -463,7 +498,14 @@ on any computer, including the Windows build.
 
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
-| `error: LookupError: KeyError: No devices found` | USRP not connected, wrong serial, missing permissions or images | Run `uhd_find_devices`; check `--args`; see Installation §E (udev rule, images) |
+| `error: LookupError: KeyError: No devices found` | B210 not connected or not powered, wrong serial in `--args`, missing USB permission, or images missing | Check `lsusb` for `2500:0020`; run `uhd_find_devices` and use the serial it prints; see [Installation E.2–E.4](INSTALLATION.md#e-set-up-the-usrp-b210-usb) |
+| `USB open failed: insufficient permissions.` | udev rule not installed or not yet applied (Linux) | Install `uhd-host` (or the rule, Installation E.3), then unplug and replug the B210 |
+| `Could not find the image 'usrp_b210_fpga.bin'` (or `usrp_b200_fw.hex`) | FPGA/firmware images not installed | `sudo uhd_images_downloader -t b2xx`, or point `UHD_IMAGES_DIR` at the images folder |
+| `Operating over USB 2.` | USB 2.0 port, hub, or non-SuperSpeed cable | Use a USB 3.0 port directly with the B210's cable. At 1.4 MSps USB 2 still works, but watch for `O` |
+| B210 disappears, resets, or USB transfer errors during a run | Not enough USB bus power, or a poor cable | Connect the 6 V DC adapter; replace or shorten the cable; avoid hubs |
+| `LO NOT locked` at start-up | Frequency out of range, or a hardware/clock problem | Check `--freq` is within 70 MHz – 6 GHz; power-cycle the B210 |
+| Header or summary shows a lower gain than requested | B210 receive gain maximum is 76 dB | Expected: UHD clips `--gain` above 76 |
+| `WARNING: actual rate differs from requested rate` | UHD couldn't reach exactly 1.4 MSps with its chosen master clock | Force a clock that divides evenly, e.g. `--args "serial=3273A14,master_clock_rate=44.8e6"` (32 × 1.4 MSps) |
 | `error: built without UHD` | Binary has no USRP support (e.g. the Windows package) | Use a UHD build ([Installation](INSTALLATION.md)) or `--source file`/`sim` |
 | Status stays **Searching for frames**; frames/s 0 | Transmitter off, wrong frequency, too little gain, or wrong frame format | Check the spectrum for the signal in the shaded band; fix `--freq`/`--gain`; see the UW note below |
 | Spectrum shows the signal but still no frames | Different unique word, or signal not at +300 kHz | If the transmitter uses a 136-symbol UW, run `--uw-zc 136:<root>`; check `--xlat-offset` |
@@ -471,7 +513,7 @@ on any computer, including the Windows build.
 | Constellation spins or smears into rings | Carrier offset beyond ±5 kHz | Retune with `--freq` to bring the CFO tile within range |
 | High pre-FEC BER, fuzzy constellation, low MER | Low SNR, interference or overload | Adjust gain ([§9.2](#92-setting-the-rf-gain)); check the noise-reference band for interference |
 | Large outer equaliser taps, MER drops with distance | Strong multipath | Expected over the air; try `--eq-delay 2` (default); improve antenna placement |
-| `O` overflows or `DROPPED` counts rising | Computer cannot keep up, or USB/network bottleneck | Close other programs; use USB 3.0; set the CPU governor to performance; raise Ethernet buffers (Installation §E) |
+| `O` overflows or `DROPPED` counts rising | Computer cannot keep up, or USB/network bottleneck | Close other programs; use USB 3.0 directly (no hub, no VM passthrough); set the CPU governor to performance; confirm with `benchmark_rate` (Installation E.5). For Ethernet USRPs, raise the socket buffers (E.7) |
 | Latency max above 20 ms | FEC batching and system load | `--fec-batch 1`; reduce load |
 | `cannot listen on 127.0.0.1:8080 (port in use?)` | Another program uses port 8080 | `--ui-port 8090` |
 | Dashboard shows **Disconnected** | `aiw_rx` stopped, or the tunnel/network dropped | Check the terminal; restart |
@@ -507,6 +549,7 @@ explains each one.
 
 | Parameter | Value |
 | --- | --- |
+| Radio | Ettus USRP B210 over USB 3.0, RF A / RX2 (default serial 3273A14) |
 | Sample rate | 1.4 MSps, 4 samples/symbol |
 | Symbol rate | 350 kBd |
 | Modulation | 256-QAM, natural-binary mapping, unit average power |

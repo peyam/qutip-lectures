@@ -88,8 +88,9 @@ They carry exchange items typed by the data model (`SampleChunk`, `SymbolChunk`,
 
 - **Where it runs:** one `aiw_rx` process on the **Host PC** node. Its eight threads and the UHD
   driver are behaviour components, deployed on the host with part-deployment links.
-- **Hardware:** the **USRP** is a node actor, connected by the *USB 3.0 / GbE* physical link, which
-  carries the UHD sample-stream and control exchanges. The transmitter reaches it over the *RF path*.
+- **Hardware:** the **USRP B210** is a node actor, connected by the *USB 3.0* physical link, which
+  carries the UHD sample-stream and control exchanges. Its property values record the device,
+  connection, 0–76 dB receive gain range and 70 MHz – 6 GHz frequency range. The transmitter reaches it over the *RF path*.
 
 ### EPBS: what is delivered
 
@@ -98,7 +99,7 @@ They carry exchange items typed by the data model (`SampleChunk`, `SymbolChunk`,
 | **CSCI** | `aiw_rx` executable, `aiw_core` library, dashboard page, `aiw_tests` |
 | **NDI** | documentation |
 | **COTS** | UHD 4.6, Eigen 3.4 |
-| **HWCI** | USRP B2xx, host PC |
+| **HWCI** | USRP B210, host PC |
 
 ---
 

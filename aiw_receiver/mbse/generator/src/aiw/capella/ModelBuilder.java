@@ -304,7 +304,7 @@ public class ModelBuilder {
 
         aOperator = actor(pkg, "Test Operator", true, "Runs aiw_rx, watches results and adjusts settings.");
         aTransmitter = actor(pkg, "AIW Transmitter", false, "Transmits UW-framed, RS(255,239)-coded 256-QAM at 350 kBd.");
-        aUsrp = actor(pkg, "USRP Radio", false, "Ettus USRP (serial 3273A14, RX2): tunes, digitises and streams IQ at 1.4 MSps.");
+        aUsrp = actor(pkg, "USRP Radio", false, "Ettus USRP B210 (serial 3273A14) on USB 3.0, channel RF A / RX2: tunes, digitises and streams IQ at 1.4 MSps.");
         aBrowser = actor(pkg, "Web Browser", false, "Displays the live dashboard served by aiw_rx --ui.");
         aFiles = actor(pkg, "File System", false, "Holds capture files (complex float32) and CSV logs.");
         aAutomation = actor(pkg, "Test Automation", false, "CTest / CI harness that runs aiw_rx and checks its exit status.");
@@ -364,7 +364,7 @@ public class ModelBuilder {
 
         List<ComponentExchange> own = pkg.getOwnedComponentExchanges();
         sce.put("RF link", ce(own, aTransmitter, aUsrp, "RF link", "Antenna or cabled RF path at 917 MHz.", sfe.get("RF waveform")));
-        sce.put("Sample stream", ce(own, aUsrp, system, "Sample stream", "UHD rx_streamer over USB 3 / GbE, fc32 at 1.4 MSps.", sfe.get("IQ stream (fc32)")));
+        sce.put("Sample stream", ce(own, aUsrp, system, "Sample stream", "UHD rx_streamer over USB 3.0 (B210), sc16 on the wire, fc32 to the host, 1.4 MSps (about 5.6 MB/s).", sfe.get("IQ stream (fc32)")));
         sce.put("Radio control", ce(own, system, aUsrp, "Radio control", "UHD multi_usrp control calls.", sfe.get("Tuning command")));
         sce.put("Command line", ce(own, aOperator, system, "Command line", "Options and signals (Ctrl+C).", sfe.get("Run configuration")));
         sce.put("Console", ce(own, system, aOperator, "Console", "Status lines and summary on stdout.", sfe.get("Console report")));
@@ -854,7 +854,10 @@ public class ModelBuilder {
             pActors.put(a.getName(), p);
         }
         pUsrp = pActors.get("USRP Radio");
-        prop(pUsrp, "Device", "Ettus USRP B2xx, serial 3273A14, antenna RX2");
+        prop(pUsrp, "Device", "Ettus USRP B210, serial 3273A14, channel RF A, antenna RX2");
+        prop(pUsrp, "Connection", "USB 3.0 SuperSpeed (USB 2.0 works); 6 V DC adapter recommended");
+        prop(pUsrp, "RX gain range", "0-76 dB");
+        prop(pUsrp, "Frequency range", "70 MHz - 6 GHz");
 
         String[][] threads = { { "Sample Ingestion (T1)", "T1 ingestion thread" }, { "Front End (T2)", "T2 front-end thread" },
                 { "Frame Synchroniser and Equaliser (T3)", "T3 sync/EQ thread" }, { "Decoder (T4)", "T4 decode thread" },
@@ -937,7 +940,7 @@ public class ModelBuilder {
         // Physical links
         List<org.polarsys.capella.core.data.cs.PhysicalLink> pl = pkg.getOwnedPhysicalLinks();
         plink(pl, pActors.get("AIW Transmitter"), pUsrp, "RF path", "Antenna or cable with attenuator, 917 MHz.", pce.get("RF link"));
-        plink(pl, pUsrp, pHost, "USB 3.0 / GbE", "USRP transport: USB 3.0 (B2xx) or Gigabit Ethernet (N2xx/X3xx).",
+        plink(pl, pUsrp, pHost, "USB 3.0", "B210 transport: USB 3.0 SuperSpeed cable direct to a host USB 3.0 port (USB 2.0 works at 1.4 MSps).",
                 pce.get("UHD sample stream"), pce.get("UHD control"));
 
         CapabilityRealizationPkg pcrp = (CapabilityRealizationPkg) pa.getOwnedAbstractCapabilityPkg();
@@ -998,7 +1001,7 @@ public class ModelBuilder {
         for (PhysicalComponent c : pSystem.getOwnedPhysicalComponents())
             if (c.getName().startsWith("UHD")) artifact(uhd, c);
         ci(root, "Eigen 3.4 (COTS)", ConfigurationItemKind.COTSCI, "Header-only linear algebra (equaliser least-squares solve).");
-        ConfigurationItem hw = ci(root, "USRP B2xx (HWCI)", ConfigurationItemKind.HWCI, "Ettus USRP, serial 3273A14.");
+        ConfigurationItem hw = ci(root, "USRP B210 (HWCI)", ConfigurationItemKind.HWCI, "Ettus USRP B210, serial 3273A14, with USB 3.0 cable and 6 V DC adapter; needs UHD images usrp_b200_fw.hex and usrp_b210_fpga.bin.");
         artifact(hw, pUsrp);
         ConfigurationItem host = ci(root, "Host PC (HWCI)", ConfigurationItemKind.HWCI, "x86-64 PC running Ubuntu 24.04 or Windows.");
         artifact(host, pHost);
