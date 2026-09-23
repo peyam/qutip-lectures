@@ -7,7 +7,8 @@ Ettus USRP through the UHD C++ API. It has no GNU Radio or Python runtime depend
 ## Build
 
 ```sh
-sudo apt install libeigen3-dev libuhd-dev     # UHD is optional, see below
+sudo apt install cmake g++ libeigen3-dev
+sudo apt install libuhd-dev libboost-dev      # optional: USRP support, see below
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build                         # offline verification
@@ -19,6 +20,14 @@ ctest --test-dir build                         # offline verification
 | `AIW_NATIVE` | `ON` | `-march=native` |
 | `AIW_FAST_MATH` | `ON` | `-ffast-math` |
 | `AIW_BUILD_TESTS` | `ON` | `aiw_tests` plus a CTest end-to-end run of `aiw_rx` |
+
+`libboost-dev` is needed alongside `libuhd-dev` because the UHD headers include Boost headers
+(`boost/config.hpp`), and on Ubuntu 24.04 `libuhd-dev` does not always pull them in. Without it the
+build fails with `fatal error: boost/config.hpp: No such file or directory`.
+
+For a binary that runs on other x86-64 machines, turn off CPU-specific tuning:
+`cmake -S . -B build -DAIW_NATIVE=OFF -DAIW_REQUIRE_UHD=ON`. At run time such a binary only needs
+`sudo apt install libuhd4.6.0t64 uhd-host` (Ubuntu 24.04) and a one-time `sudo uhd_images_downloader`.
 
 ## Run
 
