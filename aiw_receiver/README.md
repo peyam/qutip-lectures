@@ -29,6 +29,38 @@ For a binary that runs on other x86-64 machines, turn off CPU-specific tuning:
 `cmake -S . -B build -DAIW_NATIVE=OFF -DAIW_REQUIRE_UHD=ON`. At run time such a binary only needs
 `sudo apt install libuhd4.6.0t64 uhd-host` (Ubuntu 24.04) and a one-time `sudo uhd_images_downloader`.
 
+## Windows
+
+**Prebuilt build, no USRP.** Cross-compiled from Linux with MinGW-w64. The `.exe` files are
+statically linked, so they need no DLLs beyond Windows itself:
+
+```sh
+sudo apt install g++-mingw-w64-x86-64-posix libeigen3-dev
+cmake -S . -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake \
+      -DAIW_NATIVE=OFF -DEigen3_DIR=/usr/share/eigen3/cmake
+cmake --build build-win -j
+```
+
+This build supports `--source sim` and `--source file` only. Ettus ships UHD for Windows built with
+MSVC, and MinGW cannot link against MSVC C++ libraries.
+
+**With USRP support.** Build natively with Visual Studio 2022 (MSVC). This route has not been
+tested:
+
+1. Install the Ettus UHD Windows installer (UHD 4.x, MSVC build), and run `uhd_images_downloader`
+   and `uhd_find_devices`. For USB devices, also install the UHD USB driver.
+2. Install Eigen 3 and the Boost headers matching your UHD version (for example with
+   `vcpkg install eigen3 boost-config boost-format`), because the UHD headers include Boost.
+3. From a "x64 Native Tools" prompt:
+
+   ```bat
+   cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DAIW_REQUIRE_UHD=ON ^
+         -DUHD_DIR="C:/Program Files/UHD/lib/cmake/uhd" ^
+         -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+   cmake --build build --config Release
+   ```
+4. Put `C:\Program Files\UHD\bin` (`uhd.dll`) on `PATH` before running `build\Release\aiw_rx.exe`.
+
 ## Run
 
 ```sh
@@ -44,6 +76,42 @@ uncorrectable frames, RS symbols corrected (and the per-block maximum), pre-FEC 
 radiometric SNR, UW-aided MER, estimated CFO, and mean/max latency. It also flags dropped chunks and
 USRP `O` overflows. `--csv` writes the same data plus AGC gain, timing-loop rate and equalizer
 condition number.
+
+## Dashboard
+
+```sh
+./build/aiw_rx --ui                          # USRP, dashboard at http://localhost:8080
+./build/aiw_rx --source sim --ui             # demo: simulator runs endlessly in real time
+./build/aiw_rx --ui --ui-port 9000 --csv run.csv
+```
+
+`--ui` serves a live dashboard from inside `aiw_rx`. It has no extra dependencies: the page is
+embedded in the binary (`web/index.html`) and uses no external scripts, so it works on an offline
+lab machine. It shows:
+
+- **Stat tiles:** frames/s, exact-payload rate, pre-FEC and post-FEC BER, radiometric SNR, UW MER,
+  carrier offset, latency, RS corrections, and drops/overflows. A status pill reads *Receiving*,
+  *Receiving with errors*, *Searching for frames* or *Run finished*.
+- **Constellation:** the last ~2000 equalized payload symbols over the 256-QAM decision grid. Hover
+  a point to see the symbol byte it decodes to.
+- **Input spectrum:** the DC-blocked input before translation, in dBFS, with the signal band and
+  noise-reference band that the SNR radiometer uses.
+- **Trends:** BER (log scale), SNR and MER, frames/s, and mean/max latency, with a crosshair
+  tooltip and a table view.
+- **Equalizer taps** and the active **configuration**.
+- **Controls:** frequency and RF gain on a USRP; Es/N0 and carrier offset in the simulator.
+
+The receiver threads publish to the dashboard with `try_lock` only, so a slow browser can never
+stall signal processing. When a file or finite simulation ends, the dashboard stays up with the
+final figures until Ctrl+C.
+
+**Security.** The server listens on `127.0.0.1` by default. Control requests must carry an
+`X-AIW-Control: 1` header, which a cross-site page cannot send, and the `Host` header must name
+localhost, which guards against DNS rebinding. `--ui-bind 0.0.0.0` makes it reachable from the
+network **without authentication**; only use that on a trusted lab network.
+
+JSON API: `GET /api/status`, `/api/constellation`, `/api/spectrum`, `/api/history?since=<t>`;
+`POST /api/control` with `{"freq":Hz}`, `{"gain":dB}`, `{"esn0":dB}` or `{"cfo":Hz}`.
 
 ## Architecture
 
@@ -72,6 +140,9 @@ chunk is dropped and counted. File and sim sources block instead, so no data is 
 | `include/usrp_source.hpp`, `sample_source.hpp` | Section 7: UHD streaming; file and simulator sources |
 | `include/tx_simulator.hpp`, `src/tx_simulator.cpp` | Reference transmitter and channel (CFO, clock ppm, echo, DC, AWGN) |
 | `src/receiver.cpp` | Thread pipeline and metrics |
+| `include/http_server.hpp`, `src/http_server.cpp` | Minimal HTTP server (POSIX sockets / Winsock) |
+| `include/dashboard.hpp`, `src/dashboard.cpp`, `web/index.html` | Dashboard JSON API and page |
+| `include/ui_state.hpp`, `include/spectrum.hpp` | Data shared with the dashboard; FFT spectrum estimator |
 
 ## Deviations from the specification
 

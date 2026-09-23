@@ -18,6 +18,7 @@
 #include "equalizer.hpp"
 #include "metrics.hpp"
 #include "sample_source.hpp"
+#include "ui_state.hpp"
 
 namespace aiw {
 
@@ -49,6 +50,7 @@ struct RunOptions {
     bool quiet = false;
     bool realtime = false;         // pace offline sources at the sample rate
     const std::atomic<bool>* external_stop = nullptr;
+    UiState* ui = nullptr;         // dashboard feed (optional)
 };
 
 struct RunSummary {
@@ -74,6 +76,9 @@ class Receiver {
 public:
     Receiver(RxConfig cfg, std::vector<cf32> uw, std::array<uint8_t, PAYLOAD_SIZE> golden);
     RunSummary run(SampleSource& src, const RunOptions& opt);
+    const Metrics& metrics() const { return m_; }
+    const RxConfig& config() const { return cfg_; }
+    std::size_t uw_length() const { return uw_.size(); }
 
 private:
     RxConfig cfg_;

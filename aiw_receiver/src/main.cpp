@@ -11,8 +11,10 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "config.hpp"
+#include "dashboard.hpp"
 #include "golden_payload.hpp"
 #include "receiver.hpp"
 #include "sample_source.hpp"
@@ -63,6 +65,14 @@ Simulation (--source sim)
   --sim-echo RE,IM      one-symbol-delayed echo gain (default 0.15,0.1)
   --sim-seconds S       amount of signal to generate (default 5; 0 = endless)
 
+Dashboard
+  --ui                  serve the live web dashboard (http://localhost:8080)
+  --ui-port N           dashboard port (default 8080)
+  --ui-bind ADDR        listen address (default 127.0.0.1; 0.0.0.0 exposes it to
+                        the network - there is no authentication)
+                        With --ui, --source sim runs endlessly in real time unless
+                        --sim-seconds is given.
+
 Run control / output
   --duration S          stop after S seconds of wall time
   --interval S          metrics report interval (default 1)
@@ -83,7 +93,7 @@ int main(int argc, char** argv) {
     using namespace aiw;
     std::map<std::string, std::string> kv;
     const std::map<std::string, bool> flags = {{"--loop", true},  {"--no-cfo", true}, {"--expect-ber0", true},
-                                               {"--quiet", true}, {"--realtime", true}, {"--help", true},   {"-h", true}};
+                                               {"--quiet", true}, {"--realtime", true}, {"--ui", true}, {"--help", true},   {"-h", true}};
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (flags.count(a)) {
@@ -167,7 +177,7 @@ int main(int argc, char** argv) {
             ch.clock_ppm = getd("--sim-ppm", 5.0);
             ch.echo = parse_complex(get("--sim-echo", "0.15,0.1"));
             ch.if_offset_hz = cfg.xlat_offset_hz;
-            const double secs = getd("--sim-seconds", 5.0);
+            const double secs = getd("--sim-seconds", kv.count("--ui") ? 0.0 : 5.0);
             auto tx = std::make_unique<TxSimulator>(uw, golden, ch, cfg.rs_fcr);
             src = std::make_unique<SimSource>(std::move(tx), static_cast<std::size_t>(secs * SAMPLE_RATE));
         } else {
@@ -182,10 +192,24 @@ int main(int argc, char** argv) {
         opt.report_interval_s = getd("--interval", 1.0);
         opt.csv_path = get("--csv", "");
         opt.quiet = kv.count("--quiet") > 0;
-        opt.realtime = kv.count("--realtime") > 0;
+        opt.realtime = kv.count("--realtime") > 0 || (kv.count("--ui") && source == "sim");
         opt.external_stop = &g_stop;
 
         Receiver rx(cfg, uw, golden);
+        UiState ui;
+        std::unique_ptr<Dashboard> dash;
+        std::unique_ptr<HttpServer> http;
+        if (kv.count("--ui")) {
+            const std::string bind = get("--ui-bind", "127.0.0.1");
+            const int port = static_cast<int>(getd("--ui-port", 8080));
+            std::string golden_name = kv.count("--golden-file") ? "file" : get("--golden", "numpy");
+            dash = std::make_unique<Dashboard>(rx, *src, ui, bind, golden_name);
+            http = std::make_unique<HttpServer>(bind, port, [&](const HttpRequest& r) { return dash->handle(r); });
+            http->start();
+            opt.ui = &ui;
+            std::cout << "[aiw_rx] dashboard: http://" << (bind == "0.0.0.0" ? "localhost" : bind) << ":" << port
+                      << "/" << std::endl;
+        }
         const RunSummary s = rx.run(*src, opt);
 
         std::cout << "\n=== AIW-Rx summary ===\n"
@@ -202,6 +226,12 @@ int main(int argc, char** argv) {
                   << "latency mean/max   " << s.mean_latency_ms << " / " << s.max_latency_ms << " ms\n"
                   << "dropped chunks     " << s.dropped_chunks << "\n"
                   << "USRP overflows     " << s.overflows << "\n";
+
+        if (http && !g_stop) {
+            std::cout << "\n[aiw_rx] input finished; dashboard still available. Press Ctrl+C to exit.\n" << std::flush;
+            while (!g_stop) std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+        if (http) http->stop();
 
         if (kv.count("--expect-ber0") && (s.frames == 0 || s.post_fec_bit_errors != 0)) {
             std::cerr << "FAIL: expected error-free decoding\n";
