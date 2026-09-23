@@ -4,6 +4,14 @@ A native replacement for the GNU Radio flowgraph `hwil_conventional_evaluation_r
 256-QAM, RS(255,239)-shortened, UW-framed receiver at 1.4 MSps / 4 sps that talks to an
 Ettus USRP through the UHD C++ API. It has no GNU Radio or Python runtime dependency.
 
+## Documentation
+
+| Document | For |
+| --- | --- |
+| [Installation guide](docs/INSTALLATION.md) | Installing the prebuilt binaries or building from source (Linux, Windows), USRP setup, verification |
+| [User manual](docs/USER_MANUAL.md) | Running the receiver: options, output, CSV, dashboard, procedures, troubleshooting |
+| [Architecture](docs/ARCHITECTURE.md) | Design: threads and queues, DSP algorithms, dashboard, performance, verification, spec deviations |
+
 ## Build
 
 ```sh

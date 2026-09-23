@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="260" viewBox="0 0 1000 260" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13">
+  <title>AIW-Rx system context</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="260" fill="#fcfcfb"/>
+  <rect x="20" y="50" width="170" height="80" rx="10" fill="#f3f2ee" stroke="#c3c2b7"/>
+  <text x="105" y="84" text-anchor="middle" font-weight="650">AIW transmitter</text>
+  <text x="105" y="104" text-anchor="middle" fill="#52514e">256-QAM, 350 kBd</text>
+
+  <rect x="290" y="50" width="170" height="80" rx="10" fill="#f3f2ee" stroke="#c3c2b7"/>
+  <text x="375" y="84" text-anchor="middle" font-weight="650">Ettus USRP</text>
+  <text x="375" y="104" text-anchor="middle" fill="#52514e">serial 3273A14 · RX2</text>
+
+  <rect x="580" y="30" width="400" height="120" rx="10" fill="#e8f1fc" stroke="#2a78d6"/>
+  <text x="780" y="58" text-anchor="middle" font-weight="650">Host PC: aiw_rx</text>
+  <text x="600" y="84">Inputs: USRP (UHD) · capture file · simulator</text>
+  <text x="600" y="106">Outputs: console · CSV · summary + exit code</text>
+  <text x="600" y="128">Dashboard: HTTP on 127.0.0.1:8080</text>
+
+  <rect x="700" y="196" width="160" height="50" rx="10" fill="#f3f2ee" stroke="#c3c2b7"/>
+  <text x="780" y="226" text-anchor="middle" font-weight="650">Web browser</text>
+
+  <line x1="190" y1="90" x2="288" y2="90" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="239" y="80" text-anchor="middle" fill="#52514e" font-size="11">RF, 917 MHz</text>
+  <line x1="460" y1="90" x2="578" y2="90" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="519" y="80" text-anchor="middle" fill="#52514e" font-size="11">USB 3 / GbE</text>
+  <text x="519" y="108" text-anchor="middle" fill="#52514e" font-size="11">fc32 @ 1.4 MSps</text>
+  <line x1="780" y1="152" x2="780" y2="194" stroke="#52514e" stroke-width="1.5" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text x="790" y="178" fill="#52514e" font-size="11">page + JSON API · controls</text>
+</svg>
