@@ -3,6 +3,7 @@
 #pragma once
 
 #include <array>
+#include <bit>
 #include <cstdint>
 
 #include "config.hpp"
@@ -30,12 +31,12 @@ public:
         std::array<uint8_t, CODEWORD_SIZE_SHORT> cw{};
         for (std::size_t i = 0; i < DATA_LENGTH_SYM; ++i) cw[i] = qam256::slice(symbols[i]);
         for (std::size_t i = 0; i < CODEWORD_SIZE_SHORT; ++i)
-            r.pre_fec_bit_errors += static_cast<std::size_t>(__builtin_popcount(cw[i] ^ expected_cw_[i]));
+            r.pre_fec_bit_errors += static_cast<std::size_t>(std::popcount(static_cast<uint8_t>(cw[i] ^ expected_cw_[i])));
         r.rs_corrected = rs_.decode_shortened(cw);
         // On failure the systematic bytes are passed through uncorrected.
         std::copy(cw.begin(), cw.begin() + PAYLOAD_SIZE, r.payload.begin());
         for (std::size_t i = 0; i < PAYLOAD_SIZE; ++i)
-            r.post_fec_bit_errors += static_cast<std::size_t>(__builtin_popcount(r.payload[i] ^ golden_[i]));
+            r.post_fec_bit_errors += static_cast<std::size_t>(std::popcount(static_cast<uint8_t>(r.payload[i] ^ golden_[i])));
         return r;
     }
 

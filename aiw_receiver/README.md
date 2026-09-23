@@ -29,6 +29,38 @@ For a binary that runs on other x86-64 machines, turn off CPU-specific tuning:
 `cmake -S . -B build -DAIW_NATIVE=OFF -DAIW_REQUIRE_UHD=ON`. At run time such a binary only needs
 `sudo apt install libuhd4.6.0t64 uhd-host` (Ubuntu 24.04) and a one-time `sudo uhd_images_downloader`.
 
+## Windows
+
+**Prebuilt build, no USRP.** Cross-compiled from Linux with MinGW-w64. The `.exe` files are
+statically linked, so they need no DLLs beyond Windows itself:
+
+```sh
+sudo apt install g++-mingw-w64-x86-64-posix libeigen3-dev
+cmake -S . -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake \
+      -DAIW_NATIVE=OFF -DEigen3_DIR=/usr/share/eigen3/cmake
+cmake --build build-win -j
+```
+
+This build supports `--source sim` and `--source file` only. Ettus ships UHD for Windows built with
+MSVC, and MinGW cannot link against MSVC C++ libraries.
+
+**With USRP support.** Build natively with Visual Studio 2022 (MSVC). This route has not been
+tested:
+
+1. Install the Ettus UHD Windows installer (UHD 4.x, MSVC build), and run `uhd_images_downloader`
+   and `uhd_find_devices`. For USB devices, also install the UHD USB driver.
+2. Install Eigen 3 and the Boost headers matching your UHD version (for example with
+   `vcpkg install eigen3 boost-config boost-format`), because the UHD headers include Boost.
+3. From a "x64 Native Tools" prompt:
+
+   ```bat
+   cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DAIW_REQUIRE_UHD=ON ^
+         -DUHD_DIR="C:/Program Files/UHD/lib/cmake/uhd" ^
+         -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+   cmake --build build --config Release
+   ```
+4. Put `C:\Program Files\UHD\bin` (`uhd.dll`) on `PATH` before running `build\Release\aiw_rx.exe`.
+
 ## Run
 
 ```sh
