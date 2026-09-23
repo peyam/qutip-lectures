@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13">
+  <title>AIW-Rx thread pipeline</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="560" fill="#fcfcfb"/>
+
+  <!-- Source -->
+  <rect x="20" y="40" width="150" height="96" rx="10" fill="#f3f2ee" stroke="#c3c2b7"/>
+  <text x="95" y="66" text-anchor="middle" font-weight="650">Sample source</text>
+  <text x="95" y="88" text-anchor="middle" fill="#52514e">USRP (UHD, fc32)</text>
+  <text x="95" y="106" text-anchor="middle" fill="#52514e">fc32 file</text>
+  <text x="95" y="124" text-anchor="middle" fill="#52514e">TX simulator</text>
+
+  <!-- T1 -->
+  <rect x="210" y="40" width="160" height="96" rx="10" fill="#e8f1fc" stroke="#2a78d6"/>
+  <text x="290" y="64" text-anchor="middle" font-weight="650">T1 Ingestion</text>
+  <text x="290" y="86" text-anchor="middle" fill="#52514e">8192-sample chunks</text>
+  <text x="290" y="104" text-anchor="middle" fill="#52514e">timestamp t_ingest</text>
+  <text x="290" y="122" text-anchor="middle" fill="#52514e">drop (live) / block</text>
+
+  <!-- T2 -->
+  <rect x="440" y="24" width="240" height="190" rx="10" fill="#e8f1fc" stroke="#2a78d6"/>
+  <text x="560" y="48" text-anchor="middle" font-weight="650">T2 Front end + timing</text>
+  <text x="456" y="74" fill="#0b0b0b">1  DC blocker  (α = 0.96875)</text>
+  <text x="456" y="96" fill="#0b0b0b">2  Mix −300 kHz + 93-tap LPF</text>
+  <text x="456" y="118" fill="#0b0b0b">3  AGC  (multiplicative)</text>
+  <text x="456" y="140" fill="#0b0b0b">4+5  PFB clock sync</text>
+  <text x="476" y="158" fill="#52514e">32 × 65-tap RRC matched filter</text>
+  <text x="476" y="176" fill="#52514e">+ derivative bank, 2nd-order loop</text>
+  <text x="456" y="200" fill="#0b0b0b">4 sps → 1 sps</text>
+
+  <!-- T3 -->
+  <rect x="750" y="24" width="230" height="190" rx="10" fill="#e8f1fc" stroke="#2a78d6"/>
+  <text x="865" y="48" text-anchor="middle" font-weight="650">T3 Sync + equalise</text>
+  <text x="766" y="74">1  UW correlator (normalised)</text>
+  <text x="766" y="96">2  Lead + trail UW check</text>
+  <text x="766" y="118">3  Extract 502 (+2×4) symbols</text>
+  <text x="766" y="140">4  Pass 1: CFO / phase</text>
+  <text x="766" y="162">5  Pass 2: 5-tap LLS (Eigen)</text>
+  <text x="766" y="184">6  Demux 216 data symbols</text>
+
+  <!-- T4 -->
+  <rect x="750" y="300" width="230" height="150" rx="10" fill="#e8f1fc" stroke="#2a78d6"/>
+  <text x="865" y="324" text-anchor="middle" font-weight="650">T4 Demod + FEC</text>
+  <text x="766" y="350">1  256-QAM slicer → 216 B</text>
+  <text x="766" y="372">2  Batch 8 codewords</text>
+  <text x="766" y="394">3  RS(255,239), 39-byte pad</text>
+  <text x="766" y="416">4  Pre/post-FEC BER vs</text>
+  <text x="786" y="434" fill="#52514e">ground-truth payload</text>
+
+  <!-- T5 -->
+  <rect x="440" y="300" width="240" height="120" rx="10" fill="#e8f1fc" stroke="#2a78d6"/>
+  <text x="560" y="324" text-anchor="middle" font-weight="650">T5 Radiometer</text>
+  <text x="456" y="350">H1 band +60…+540 kHz</text>
+  <text x="456" y="372">H2 band −540…−60 kHz</text>
+  <text x="456" y="394">EMA(10⁵) → SNR per 10⁴ samples</text>
+  <text x="456" y="412" fill="#52514e">(+ 1024-pt FFT when --ui)</text>
+
+  <!-- Main thread -->
+  <rect x="20" y="300" width="350" height="150" rx="10" fill="#fdf0ea" stroke="#eb6834"/>
+  <text x="195" y="324" text-anchor="middle" font-weight="650">Main thread: metrics dispatcher</text>
+  <text x="36" y="350">Reads lock-free atomic counters (Metrics)</text>
+  <text x="36" y="372">every --interval s → stdout line, --csv row,</text>
+  <text x="36" y="394">UiState history; final summary + exit code</text>
+  <text x="36" y="424" font-weight="650">HTTP thread (--ui):</text>
+  <text x="192" y="424" fill="#52514e">dashboard + JSON API</text>
+
+  <!-- arrows: queues -->
+  <line x1="170" y1="88" x2="208" y2="88" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="370" y1="88" x2="438" y2="88" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="404" y="78" text-anchor="middle" fill="#52514e" font-size="11">q_in</text>
+  <text x="404" y="106" text-anchor="middle" fill="#52514e" font-size="11">128</text>
+  <line x1="680" y1="118" x2="748" y2="118" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="714" y="108" text-anchor="middle" fill="#52514e" font-size="11">q_sym</text>
+  <text x="714" y="136" text-anchor="middle" fill="#52514e" font-size="11">128</text>
+  <line x1="865" y1="214" x2="865" y2="298" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="875" y="252" fill="#52514e" font-size="11">q_frames</text>
+  <text x="875" y="268" fill="#52514e" font-size="11">1024</text>
+  <line x1="560" y1="214" x2="560" y2="298" stroke="#52514e" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  <text x="570" y="252" fill="#52514e" font-size="11">q_snr 64</text>
+  <text x="570" y="268" fill="#52514e" font-size="11">(drop if full)</text>
+
+  <!-- metrics dotted to main -->
+  <line x1="438" y1="370" x2="372" y2="370" stroke="#eb6834" stroke-width="1.2" stroke-dasharray="2 3" marker-end="url(#a)"/>
+  <path d="M 865 450 L 865 490 L 195 490 L 195 452" fill="none" stroke="#eb6834" stroke-width="1.2" stroke-dasharray="2 3" marker-end="url(#a)"/>
+  <text x="530" y="508" text-anchor="middle" fill="#52514e" font-size="11">atomic Metrics counters, written by every thread, read by the dispatcher and the dashboard</text>
+
+  <!-- legend -->
+  <line x1="20" y1="536" x2="50" y2="536" stroke="#52514e" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="58" y="540" font-size="11" fill="#52514e">SPSC lock-free ring (slot count)</text>
+  <line x1="260" y1="536" x2="290" y2="536" stroke="#52514e" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  <text x="298" y="540" font-size="11" fill="#52514e">statistics path (may drop)</text>
+  <line x1="470" y1="536" x2="500" y2="536" stroke="#eb6834" stroke-width="1.2" stroke-dasharray="2 3" marker-end="url(#a)"/>
+  <text x="508" y="540" font-size="11" fill="#52514e">metrics (relaxed atomics)</text>
+</svg>
