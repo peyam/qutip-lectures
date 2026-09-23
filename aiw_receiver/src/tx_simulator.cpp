@@ -26,12 +26,22 @@ TxSimulator::TxSimulator(std::vector<cf32> uw, std::array<uint8_t, 200> payload,
     sig_rms_ = std::sqrt(e / SPS);
     // Es/N0 referenced to the matched-filter output: per-sample complex noise
     // variance = Es / (N0-normalised) with Es = sum h^2.
-    if (ch_.esn0_db < 200.0) noise_sigma_ = std::sqrt(e / std::pow(10.0, ch_.esn0_db / 10.0) / 2.0);
+    shaped_energy_ = e;
 
     t_step_ = 1.0 + ch_.clock_ppm * 1e-6;
     t_ = 8.0 + ch_.timing_offset;
-    const double w = 2.0 * PI * (ch_.if_offset_hz + ch_.cfo_hz) / SAMPLE_RATE;
-    lo_step_ = std::polar(1.0, w);
+    req_esn0_.store(ch_.esn0_db);
+    req_cfo_.store(ch_.cfo_hz);
+    apply_channel();
+}
+
+void TxSimulator::apply_channel() {
+    ch_.esn0_db = req_esn0_.load();
+    ch_.cfo_hz = req_cfo_.load();
+    noise_sigma_ = ch_.esn0_db < 200.0
+                       ? std::sqrt(shaped_energy_ / std::pow(10.0, ch_.esn0_db / 10.0) / 2.0)
+                       : 0.0;
+    lo_step_ = std::polar(1.0, 2.0 * PI * (ch_.if_offset_hz + ch_.cfo_hz) / SAMPLE_RATE);
 }
 
 void TxSimulator::refill_baseband() {
@@ -70,6 +80,7 @@ cf32 TxSimulator::interp(double t) {
 }
 
 void TxSimulator::generate(cf32* out, std::size_t n) {
+    if (req_pending_.exchange(false)) apply_channel();
     const float amp = ch_.amplitude / static_cast<float>(sig_rms_);
     for (std::size_t k = 0; k < n; ++k) {
         while (t_ + 4.0 >= bb_base_ + static_cast<double>(bb_.size())) refill_baseband();

@@ -47,7 +47,19 @@ else()
 endif()
 
 # Hardware-independent DSP core, shared by the receiver and the tests.
+# Dashboard page embedded into the binary (rebuilt when web/index.html changes).
+set(AIW_PAGE_CPP ${CMAKE_CURRENT_BINARY_DIR}/dashboard_page.cpp)
+add_custom_command(
+    OUTPUT ${AIW_PAGE_CPP}
+    COMMAND ${CMAKE_COMMAND} -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/web/index.html
+            -DOUTPUT=${AIW_PAGE_CPP} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_file.cmake
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/web/index.html ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_file.cmake
+    COMMENT "Embedding dashboard page")
+
 add_library(aiw_core STATIC
+    src/dashboard.cpp
+    src/http_server.cpp
+    ${AIW_PAGE_CPP}
     src/equalizer.cpp
     src/fec_reed_solomon.cpp
     src/pfb_clock_sync.cpp
@@ -57,6 +69,9 @@ add_library(aiw_core STATIC
 )
 target_include_directories(aiw_core PUBLIC include)
 target_link_libraries(aiw_core PUBLIC Eigen3::Eigen Threads::Threads)
+if(WIN32)
+    target_link_libraries(aiw_core PUBLIC ws2_32)
+endif()
 
 add_executable(aiw_rx src/main.cpp)
 target_link_libraries(aiw_rx PRIVATE aiw_core)

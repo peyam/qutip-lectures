@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIW-Rx Dashboard</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f3f2ee;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #7a7873;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #eb6834;
+  --good: #0ca30c; --good-text: #006300; --warn: #fab219; --crit: #d03b3b;
+  --accent: #2a78d6; --accent-ink: #ffffff;
+  --radius: 10px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #92908a;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926;
+    --good-text: #0ca30c;
+    --accent: #3987e5;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font-size: 14px; line-height: 1.4; }
+header {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface);
+  position: sticky; top: 0; z-index: 5;
+}
+header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+header .src { color: var(--ink-2); overflow-wrap: anywhere; }
+header .spacer { flex: 1; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); font-weight: 550; white-space: nowrap;
+}
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.good .dot { background: var(--good); } .pill.warn .dot { background: var(--warn); }
+.pill.crit .dot { background: var(--crit); }
+button {
+  font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--ink); cursor: pointer;
+}
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+button:disabled { opacity: 0.5; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { padding: 16px 20px 32px; max-width: 1600px; margin: 0 auto; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(128px, 100%), 1fr)); gap: 10px; margin-bottom: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; min-width: 0; }
+.tile .label { color: var(--ink-2); font-size: 12px; }
+.tile .value { font-size: 22px; font-weight: 650; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .value small { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-left: 3px; }
+.tile .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.layout { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; min-width: 0; }
+.card h2 { font-size: 14px; margin: 0 0 2px; font-weight: 650; }
+.card .hint { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+.chart { position: relative; width: 100%; }
+.chart canvas { display: block; width: 100%; height: 100%; }
+.sq { aspect-ratio: 1 / 1; }
+.wide { height: 220px; }
+.small { height: 170px; }
+.trends { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--ink-2); font-size: 12px; margin-bottom: 4px; }
+.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; border-radius: 1px; }
+.legend i.dash { background: none !important; border-top: 2px dashed; height: 0; }
+.tip {
+  position: absolute; pointer-events: none; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12); white-space: nowrap; display: none; z-index: 3;
+}
+.tip b { font-weight: 650; font-variant-numeric: tabular-nums; }
+.tip .row { display: flex; align-items: center; gap: 6px; }
+.tip .sw { width: 10px; height: 2px; border-radius: 1px; }
+.form { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 10px; align-items: center; }
+.form label { color: var(--ink-2); }
+.form input[type=number] { width: 100%; font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--page); color: var(--ink); }
+.form input[type=range] { width: 100%; accent-color: var(--accent); }
+.form .unit { color: var(--muted); }
+.msg { min-height: 1.4em; margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+.msg.err { color: var(--crit); } .msg.ok { color: var(--good-text); }
+dl.cfg { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 13px; }
+dl.cfg dt { color: var(--ink-2); } dl.cfg dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.taps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; align-items: end; height: 90px; }
+.taps div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; font-size: 11px; color: var(--muted); }
+.taps span.bar { width: 60%; background: var(--s1); border-radius: 4px 4px 0 0; min-height: 2px; }
+.taps span.v { color: var(--ink-2); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+details summary { cursor: pointer; color: var(--ink-2); margin-top: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 6px; }
+th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--grid); }
+th { color: var(--ink-2); font-weight: 600; }
+.tablewrap { max-height: 260px; overflow: auto; }
+.banner { display: none; margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>AIW-Rx</h1>
+  <span class="src" id="src">connecting…</span>
+  <span class="spacer"></span>
+  <span class="pill" id="state"><span class="dot"></span><span id="stateText">Connecting</span></span>
+  <span class="pill" id="uptime">0 s</span>
+  <button id="pause" aria-pressed="false">Pause plots</button>
+</header>
+<main>
+  <div class="banner" id="banner"></div>
+  <section class="tiles" aria-label="Key metrics">
+    <div class="tile"><div class="label">Frames / s</div><div class="value" id="t-fps">–</div><div class="sub" id="t-fps-sub">&nbsp;</div></div>
+    <div class="tile"><div class="label">Payload exact</div><div class="value" id="t-ok">–</div><div class="sub" id="t-ok-sub">&nbsp;</div></div>
+    <div class="tile"><div class="label">Post-FEC BER</div><div class="value" id="t-post">–</div><div class="sub" id="t-post-sub">&nbsp;</div></div>
+    <div class="tile"><div class="label">Pre-FEC BER</div><div class="value" id="t-pre">–</div><div class="sub" id="t-pre-sub">&nbsp;</div></div>
+    <div class="tile"><div class="label">SNR (radiometer)</div><div class="value" id="t-snr">–</div><div class="sub">60–540 kHz band</div></div>
+    <div class="tile"><div class="label">MER (UW)</div><div class="value" id="t-mer">–</div><div class="sub" id="t-mer-sub">&nbsp;</div></div>
+    <div class="tile"><div class="label">Carrier offset</div><div class="value" id="t-cfo">–</div><div class="sub">from unique words</div></div>
+    <div class="tile"><div class="label">Latency</div><div class="value" id="t-lat">–</div><div class="sub" id="t-lat-sub">&nbsp;</div></div>
+    <div class="tile"><div class="label">RS corrections</div><div class="value" id="t-rs">–</div><div class="sub" id="t-rs-sub">&nbsp;</div></div>
+    <div class="tile"><div class="label">Drops / overflows</div><div class="value" id="t-drop">–</div><div class="sub" id="t-drop-sub">&nbsp;</div></div>
+  </section>
+
+  <div class="layout">
+    <div class="col">
+      <section class="card">
+        <h2>Constellation</h2>
+        <p class="hint">Equalised payload symbols, last ~9 frames, 256-QAM decision grid</p>
+        <div class="chart sq"><canvas id="cons" role="img" aria-label="256-QAM constellation"></canvas><div class="tip" id="cons-tip"></div></div>
+      </section>
+      <section class="card">
+        <h2>Controls</h2>
+        <p class="hint" id="ctl-hint">&nbsp;</p>
+        <div id="ctl"></div>
+        <div class="msg" id="ctl-msg" role="status"></div>
+      </section>
+      <section class="card">
+        <h2>Equaliser taps</h2>
+        <p class="hint">|w| of the 5-tap least-squares equaliser, latest frame</p>
+        <div class="taps" id="taps"></div>
+      </section>
+      <section class="card">
+        <h2>Configuration</h2>
+        <dl class="cfg" id="cfg"></dl>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card">
+        <h2>Input spectrum</h2>
+        <p class="hint">DC-blocked input before translation, averaged 1024-point FFT, dBFS. Shaded: signal band and noise-reference band used for SNR.</p>
+        <div class="chart wide"><canvas id="spec" role="img" aria-label="Input power spectrum"></canvas><div class="tip" id="spec-tip"></div></div>
+      </section>
+      <div class="trends">
+        <section class="card">
+          <h2>Bit error rate</h2>
+          <div class="legend"><span><i style="background:var(--s1)"></i>Pre-FEC</span><span><i style="background:var(--s2)"></i>Post-FEC</span></div>
+          <div class="chart small"><canvas id="ber" role="img" aria-label="BER trend"></canvas><div class="tip" id="ber-tip"></div></div>
+        </section>
+        <section class="card">
+          <h2>SNR and MER</h2>
+          <div class="legend"><span><i style="background:var(--s1)"></i>SNR (radiometer)</span><span><i style="background:var(--s2)"></i>MER (UW)</span></div>
+          <div class="chart small"><canvas id="snr" role="img" aria-label="SNR and MER trend"></canvas><div class="tip" id="snr-tip"></div></div>
+        </section>
+        <section class="card">
+          <h2>Frames per second</h2>
+          <div class="chart small"><canvas id="fps" role="img" aria-label="Frame rate trend"></canvas><div class="tip" id="fps-tip"></div></div>
+        </section>
+        <section class="card">
+          <h2>Latency</h2>
+          <div class="legend"><span><i style="background:var(--s1)"></i>Mean</span><span><i class="dash" style="border-color:var(--s2)"></i>Max</span></div>
+          <div class="chart small"><canvas id="lat" role="img" aria-label="Latency trend"></canvas><div class="tip" id="lat-tip"></div></div>
+        </section>
+      </div>
+      <section class="card">
+        <details>
+          <summary>Table view (last 60 intervals)</summary>
+          <div class="tablewrap"><table><thead><tr><th>t (s)</th><th>frames/s</th><th>pre-FEC BER</th><th>post-FEC BER</th><th>SNR dB</th><th>MER dB</th><th>CFO Hz</th><th>lat ms</th><th>unc</th></tr></thead><tbody id="tbl"></tbody></table></div>
+        </details>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const QAM_SCALE = Math.sqrt(170);
+let paused = false;
+let status = null;
+let history = [];
+let lastT = -1;
+let online = false;
+
+// ---------- formatting ----------
+function fmtBer(v) {
+  if (v === null || v === undefined) return "–";
+  if (v === 0) return "0";
+  return v.toExponential(1);
+}
+function fmt(v, d = 1) { return v === null || v === undefined ? "–" : v.toFixed(d); }
+function fmtInt(v) { return v === null || v === undefined ? "–" : Math.round(v).toLocaleString(); }
+function fmtDur(s) {
+  s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  return h ? `${h}h ${m}m` : m ? `${m}m ${r}s` : `${r} s`;
+}
+function setVal(id, text, unit) {
+  const el = $(id); el.textContent = text;
+  if (unit && text !== "–") { const u = document.createElement("small"); u.textContent = unit; el.appendChild(u); }
+}
+
+// ---------- canvas helpers ----------
+function setupCanvas(cv) {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const w = Math.max(10, Math.round(r.width)), h = Math.max(10, Math.round(r.height));
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h };
+}
+function niceTicks(lo, hi, n) {
+  const span = hi - lo; if (!(span > 0)) return [lo];
+  const step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(k => k * mag).find(s => s >= step0) || mag * 10;
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+function showTip(tip, host, x, y, rows, title) {
+  tip.replaceChildren();
+  if (title) { const t = document.createElement("div"); t.style.color = css("--ink-2"); t.textContent = title; tip.appendChild(t); }
+  for (const r of rows) {
+    const row = document.createElement("div"); row.className = "row";
+    if (r.color) { const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = r.color; row.appendChild(sw); }
+    const b = document.createElement("b"); b.textContent = r.value; row.appendChild(b);
+    const l = document.createElement("span"); l.style.color = css("--ink-2"); l.textContent = r.label; row.appendChild(l);
+    tip.appendChild(row);
+  }
+  tip.style.display = "block";
+  const hw = host.clientWidth, tw = tip.offsetWidth, th = tip.offsetHeight;
+  tip.style.left = Math.min(Math.max(0, x + 12), hw - tw) + "px";
+  tip.style.top = Math.max(0, y - th - 8) + "px";
+}
+
+// Generic time-series chart: one y-axis, optional log scale, shared crosshair.
+const charts = {};
+function lineChart(id, cfg) {
+  const cv = $(id), tip = $(id + "-tip"), host = cv.parentElement;
+  const st = { cfg, hoverX: null, geom: null };
+  charts[id] = st;
+  cv.addEventListener("pointermove", (e) => { const r = cv.getBoundingClientRect(); st.hoverX = e.clientX - r.left; draw(); });
+  cv.addEventListener("pointerleave", () => { st.hoverX = null; tip.style.display = "none"; draw(); });
+  function draw() {
+    const { ctx, w, h } = setupCanvas(cv);
+    const pad = { l: 52, r: 12, t: 8, b: 22 };
+    const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+    const pts = history;
+    const series = cfg.series;
+    const tmax = pts.length ? pts[pts.length - 1].t : 60, tmin = Math.max(0, tmax - Math.max(60, cfg.window || 300));
+    const tr = (v) => cfg.log ? Math.log10(Math.max(v, cfg.floor)) : v;
+    let lo = Infinity, hi = -Infinity;
+    for (const p of pts) for (const s of series) { const v = p[s.key]; if (v !== null && v !== undefined && p.t >= tmin) { lo = Math.min(lo, tr(v)); hi = Math.max(hi, tr(v)); } }
+    if (cfg.log) { lo = Math.log10(cfg.floor); hi = Math.max(0, Math.ceil(hi)); if (!isFinite(hi)) hi = 0; }
+    else {
+      if (!isFinite(lo)) { lo = 0; hi = 1; }
+      if (cfg.zero) lo = Math.min(0, lo);
+      const m = (hi - lo) * 0.1 || Math.abs(hi) * 0.1 || 1; hi += m; if (!cfg.zero) lo -= m;
+    }
+    const X = (t) => pad.l + (t - tmin) / (tmax - tmin || 1) * pw;
+    const Y = (v) => pad.t + (1 - (tr(v) - lo) / (hi - lo || 1)) * ph;
+    ctx.font = "11px system-ui, sans-serif"; ctx.textBaseline = "middle";
+    // grid + y labels
+    const yt = cfg.log ? Array.from({ length: hi - lo + 1 }, (_, i) => lo + i) : niceTicks(lo, hi, 4);
+    for (const v of yt) {
+      const y = cfg.log ? pad.t + (1 - (v - lo) / (hi - lo || 1)) * ph : Y(v);
+      ctx.strokeStyle = css("--grid"); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pad.l, Math.round(y) + 0.5); ctx.lineTo(w - pad.r, Math.round(y) + 0.5); ctx.stroke();
+      ctx.fillStyle = css("--muted"); ctx.textAlign = "right";
+      const label = cfg.log ? (v === lo ? "0" : v === 0 ? "1" : "1e" + v) : cfg.tick ? cfg.tick(v) : String(v);
+      ctx.fillText(label, pad.l - 6, y);
+    }
+    // x labels
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (const t of niceTicks(tmin, tmax, Math.max(2, Math.floor(pw / 70)))) { ctx.fillStyle = css("--muted"); ctx.fillText(fmtDur(t), X(t), h - pad.b + 6); }
+    ctx.strokeStyle = css("--axis"); ctx.beginPath(); ctx.moveTo(pad.l, pad.t + ph + 0.5); ctx.lineTo(w - pad.r, pad.t + ph + 0.5); ctx.stroke();
+    // series
+    for (const s of series) {
+      ctx.strokeStyle = css(s.color); ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.setLineDash(s.dash ? [5, 4] : []);
+      ctx.beginPath(); let pen = false;
+      for (const p of pts) {
+        const v = p[s.key];
+        if (p.t < tmin || v === null || v === undefined) { pen = false; continue; }
+        const x = X(p.t), y = Y(v);
+        if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
+      }
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    // crosshair
+    if (st.hoverX !== null && pts.length) {
+      const tHover = tmin + (st.hoverX - pad.l) / pw * (tmax - tmin);
+      let best = null; for (const p of pts) if (p.t >= tmin && (!best || Math.abs(p.t - tHover) < Math.abs(best.t - tHover))) best = p;
+      if (best) {
+        const x = X(best.t);
+        ctx.strokeStyle = css("--axis"); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, pad.t); ctx.lineTo(Math.round(x) + 0.5, pad.t + ph); ctx.stroke();
+        const rows = [];
+        for (const s of series) {
+          const v = best[s.key];
+          if (v !== null && v !== undefined) {
+            ctx.fillStyle = css(s.color); ctx.strokeStyle = css("--surface"); ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, Y(v), 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+          }
+          rows.push({ color: css(s.color), value: s.fmt(v), label: s.label });
+        }
+        showTip(tip, host, x, pad.t + 10, rows, "t = " + fmtDur(best.t));
+      }
+    }
+  }
+  st.draw = draw;
+  return st;
+}
+
+// ---------- constellation ----------
+let consPts = [];
+const consView = 1.25;
+function drawConstellation(hover) {
+  const cv = $("cons"); const { ctx, w, h } = setupCanvas(cv);
+  const size = Math.min(w, h), ox = (w - size) / 2, oy = (h - size) / 2;
+  const P = (v) => (v / consView + 1) / 2 * size;
+  // decision boundaries at even levels
+  ctx.strokeStyle = css("--grid"); ctx.lineWidth = 1;
+  for (let k = -14; k <= 14; k += 2) {
+    const p = P(k / QAM_SCALE);
+    ctx.beginPath(); ctx.moveTo(ox + p, oy); ctx.lineTo(ox + p, oy + size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ox, oy + size - p); ctx.lineTo(ox + size, oy + size - p); ctx.stroke();
+  }
+  ctx.strokeStyle = css("--axis");
+  ctx.beginPath(); ctx.moveTo(ox + P(0), oy); ctx.lineTo(ox + P(0), oy + size); ctx.moveTo(ox, oy + size - P(0)); ctx.lineTo(ox + size, oy + size - P(0)); ctx.stroke();
+  ctx.fillStyle = css("--s1"); ctx.globalAlpha = 0.55;
+  for (let i = 0; i + 1 < consPts.length; i += 2) {
+    ctx.fillRect(ox + P(consPts[i]) - 1, oy + size - P(consPts[i + 1]) - 1, 2.2, 2.2);
+  }
+  ctx.globalAlpha = 1;
+  if (hover) {
+    const I = (hover.x - ox) / size * 2 * consView - consView, Q = (1 - (hover.y - oy) / size) * 2 * consView - consView;
+    const lvl = (x) => Math.max(-15, Math.min(15, 2 * Math.floor(x * QAM_SCALE / 2) + 1));
+    const li = lvl(I), lq = lvl(Q), byte = (((li + 15) / 2) << 4) | ((lq + 15) / 2);
+    const cx = ox + P(li / QAM_SCALE), cy = oy + size - P(lq / QAM_SCALE), half = size / (consView * 2) / QAM_SCALE;
+    ctx.strokeStyle = css("--ink-2"); ctx.lineWidth = 1.5; ctx.strokeRect(cx - half, cy - half, 2 * half, 2 * half);
+    showTip($("cons-tip"), cv.parentElement, hover.x, hover.y, [
+      { value: "0x" + byte.toString(16).padStart(2, "0"), label: `symbol (I ${li}, Q ${lq})` },
+      { value: `${I.toFixed(3)}, ${Q.toFixed(3)}`, label: "cursor I, Q" }]);
+  }
+}
+let consHover = null;
+$("cons").addEventListener("pointermove", (e) => { const r = e.target.getBoundingClientRect(); consHover = { x: e.clientX - r.left, y: e.clientY - r.top }; drawConstellation(consHover); });
+$("cons").addEventListener("pointerleave", () => { consHover = null; $("cons-tip").style.display = "none"; drawConstellation(null); });
+
+// ---------- spectrum ----------
+let psd = [], specFs = 1.4e6, specHover = null;
+function drawSpectrum() {
+  const cv = $("spec"); const { ctx, w, h } = setupCanvas(cv);
+  const pad = { l: 44, r: 12, t: 8, b: 22 }, pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+  const n = psd.length, half = specFs / 2e3;
+  const fx = (k) => pad.l + (k + half) / (2 * half) * pw;
+  let hi = -Infinity, lo = Infinity; for (const v of psd) { hi = Math.max(hi, v); lo = Math.min(lo, v); }
+  if (!n) { hi = 0; lo = -100; }
+  hi = Math.ceil((hi + 5) / 10) * 10; lo = Math.max(hi - 90, Math.floor((lo - 5) / 10) * 10);
+  const Y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * ph;
+  // bands
+  const offs = status ? status.config.xlat_offset_hz / 1e3 : 300;
+  ctx.fillStyle = css("--s1"); ctx.globalAlpha = 0.08; ctx.fillRect(fx(60), pad.t, fx(540) - fx(60), ph);
+  ctx.fillStyle = css("--muted"); ctx.globalAlpha = 0.10; ctx.fillRect(fx(-540), pad.t, fx(-60) - fx(-540), ph);
+  ctx.globalAlpha = 1;
+  ctx.font = "11px system-ui, sans-serif"; ctx.textBaseline = "top"; ctx.textAlign = "center"; ctx.fillStyle = css("--ink-2");
+  ctx.fillText("signal band", fx(300), pad.t + 4); ctx.fillText("noise reference", fx(-300), pad.t + 4);
+  ctx.textBaseline = "middle";
+  for (const v of niceTicks(lo, hi, 5)) {
+    ctx.strokeStyle = css("--grid"); ctx.beginPath(); ctx.moveTo(pad.l, Math.round(Y(v)) + 0.5); ctx.lineTo(w - pad.r, Math.round(Y(v)) + 0.5); ctx.stroke();
+    ctx.fillStyle = css("--muted"); ctx.textAlign = "right"; ctx.fillText(v + "", pad.l - 6, Y(v));
+  }
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  const fticks = niceTicks(-half, half, Math.max(3, Math.floor(pw / 80)));
+  fticks.forEach((k, i) => { ctx.fillStyle = css("--muted"); ctx.fillText(k + (i === fticks.length - 1 ? " kHz" : ""), fx(k), h - pad.b + 6); });
+  ctx.strokeStyle = css("--axis"); ctx.beginPath(); ctx.moveTo(pad.l, pad.t + ph + 0.5); ctx.lineTo(w - pad.r, pad.t + ph + 0.5); ctx.stroke();
+  // carrier marker
+  ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(fx(offs), pad.t + 16); ctx.lineTo(fx(offs), pad.t + ph); ctx.stroke(); ctx.setLineDash([]);
+  if (n) {
+    ctx.strokeStyle = css("--s1"); ctx.lineWidth = 1.5; ctx.lineJoin = "round"; ctx.beginPath();
+    for (let i = 0; i < n; i++) { const k = (i / n - 0.5) * 2 * half, x = fx(k), y = Y(Math.max(lo, psd[i])); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke();
+  }
+  if (specHover !== null && n) {
+    const k = (specHover - pad.l) / pw * 2 * half - half, i = Math.max(0, Math.min(n - 1, Math.round((k / (2 * half) + 0.5) * n)));
+    const x = fx((i / n - 0.5) * 2 * half);
+    ctx.strokeStyle = css("--axis"); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, pad.t); ctx.lineTo(Math.round(x) + 0.5, pad.t + ph); ctx.stroke();
+    ctx.fillStyle = css("--s1"); ctx.strokeStyle = css("--surface"); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, Y(Math.max(lo, psd[i])), 4, 0, 7); ctx.fill(); ctx.stroke();
+    const rf = status && isFinite(status.source.center_freq) ? ` · ${((status.source.center_freq + (i / n - 0.5) * specFs) / 1e6).toFixed(4)} MHz` : "";
+    showTip($("spec-tip"), cv.parentElement, x, pad.t + 12, [{ color: css("--s1"), value: psd[i].toFixed(1) + " dB", label: "" }], `${((i / n - 0.5) * specFs / 1e3).toFixed(1)} kHz${rf}`);
+  }
+}
+$("spec").addEventListener("pointermove", (e) => { specHover = e.clientX - e.target.getBoundingClientRect().left; drawSpectrum(); });
+$("spec").addEventListener("pointerleave", () => { specHover = null; $("spec-tip").style.display = "none"; drawSpectrum(); });
+
+// ---------- trend charts ----------
+lineChart("ber", { log: true, floor: 1e-7, series: [
+  { key: "pre", label: "pre-FEC", color: "--s1", fmt: fmtBer },
+  { key: "post", label: "post-FEC", color: "--s2", fmt: fmtBer }] });
+lineChart("snr", { tick: (v) => v + " dB", series: [
+  { key: "snr", label: "SNR", color: "--s1", fmt: (v) => fmt(v) + " dB" },
+  { key: "mer", label: "MER", color: "--s2", fmt: (v) => fmt(v) + " dB" }] });
+lineChart("fps", { zero: true, series: [{ key: "fps", label: "frames/s", color: "--s1", fmt: (v) => fmt(v, 0) }] });
+lineChart("lat", { zero: true, tick: (v) => v + " ms", series: [
+  { key: "lat", label: "mean", color: "--s1", fmt: (v) => fmt(v) + " ms" },
+  { key: "latmax", label: "max", color: "--s2", dash: true, fmt: (v) => fmt(v) + " ms" }] });
+function drawTrends() { for (const k in charts) charts[k].draw(); }
+
+// ---------- status / tiles / controls ----------
+function renderStatus() {
+  const s = status, iv = s.interval || {}, T = s.totals, L = s.live;
+  $("src").textContent = s.source.describe + (isFinite(s.source.center_freq) && s.source.center_freq !== null ? ` · ${(s.source.center_freq / 1e6).toFixed(3)} MHz · ${fmt(s.source.gain)} dB` : "");
+  $("uptime").textContent = "up " + fmtDur(s.uptime_s);
+  const st = $("state"), fps = iv.frames_per_s;
+  let cls = "", text;
+  if (!online) { cls = "crit"; text = "Disconnected"; }
+  else if (s.run_finished) { cls = ""; text = "Run finished"; }
+  else if (fps > 0 && (iv.uncorrectable || 0) === 0) { cls = "good"; text = "Receiving"; }
+  else if (fps > 0) { cls = "warn"; text = "Receiving with errors"; }
+  else { cls = "warn"; text = "Searching for frames"; }
+  st.className = "pill " + cls; $("stateText").textContent = text;
+
+  setVal("t-fps", fmt(fps, 0)); $("t-fps-sub").textContent = fmtInt(T.frames) + " total";
+  const okPct = T.frames ? 100 * T.frames_ok / T.frames : null;
+  setVal("t-ok", okPct === null ? "–" : okPct >= 99.995 ? "100" : okPct.toFixed(2), "%");
+  $("t-ok-sub").textContent = fmtInt(T.uncorrectable) + " uncorrectable";
+  setVal("t-post", fmtBer(iv.post_ber)); $("t-post-sub").textContent = "total " + fmtBer(T.post_fec_ber);
+  setVal("t-pre", fmtBer(iv.pre_ber)); $("t-pre-sub").textContent = "total " + fmtBer(T.pre_fec_ber);
+  setVal("t-snr", fmt(L.snr_db), "dB");
+  setVal("t-mer", fmt(L.mer_db), "dB"); $("t-mer-sub").textContent = "EQ cond " + fmt(L.eq_cond, 2);
+  setVal("t-cfo", L.cfo_hz === null ? "–" : Math.round(L.cfo_hz).toString(), "Hz");
+  setVal("t-lat", fmt(iv.lat_mean_ms), "ms"); $("t-lat-sub").textContent = "max " + fmt(iv.lat_max_ms) + " ms";
+  setVal("t-rs", fmtInt(iv.rs_max), "max/blk"); $("t-rs-sub").textContent = fmtInt(T.rs_corrected) + " fixed";
+  setVal("t-drop", fmtInt(T.dropped) + " / " + fmtInt(T.overflows)); $("t-drop-sub").textContent = "chunks / USRP O";
+
+  const b = $("banner");
+  if (s.run_finished) { b.style.display = "block"; b.textContent = "The input has ended. Figures are frozen at the end of the run; press Ctrl+C in the terminal to exit."; }
+  else b.style.display = "none";
+
+  const c = s.config, rows = [
+    ["Sample rate", (c.sample_rate / 1e6).toFixed(3) + " MSps"], ["Symbol rate", (c.symbol_rate / 1e3).toFixed(0) + " kBd"],
+    ["Unique word", c.uw_length + " symbols"], ["Segment", c.segment_length + " symbols"],
+    ["Translation", (c.xlat_offset_hz / 1e3).toFixed(0) + " kHz"], ["AGC attack / decay", c.agc_attack + " / " + c.agc_decay],
+    ["PFB loop BW / damping", c.pfb_loop_bw.toFixed(4) + " / " + c.pfb_damping], ["Corr. threshold", c.corr_threshold],
+    ["EQ delay / λ", c.eq_delay + " / " + c.eq_lambda], ["CFO correction", c.cfo_correction ? "on" : "off"],
+    ["FEC batch", c.fec_batch], ["RS fcr", c.rs_fcr], ["Warm-up frames", c.warmup_frames], ["Ground truth", c.golden],
+    ["Correlation peak", fmt(L.corr_metric, 3)], ["AGC gain", fmt(L.agc_gain, 2)], ["PFB rate", L.pfb_rate === null ? "–" : L.pfb_rate.toExponential(2)]];
+  const dl = $("cfg"); dl.replaceChildren();
+  for (const [k, v] of rows) { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; dl.append(dt, dd); }
+}
+
+let controlsBuiltFor = null;
+function buildControls() {
+  const kind = status.source.kind, box = $("ctl");
+  if (controlsBuiltFor === kind) return;
+  controlsBuiltFor = kind; box.replaceChildren();
+  const form = document.createElement("div"); form.className = "form";
+  const add = (label, id, attrs, unit, key, scale) => {
+    const l = document.createElement("label"); l.textContent = label; l.htmlFor = id;
+    const inp = document.createElement("input"); inp.id = id; Object.assign(inp, attrs);
+    const u = document.createElement("span"); u.className = "unit"; u.textContent = unit;
+    form.append(l, inp, u);
+    return { inp, key, scale };
+  };
+  let fields = [];
+  if (kind === "usrp") {
+    $("ctl-hint").textContent = "Retune the USRP while receiving.";
+    fields.push(add("Frequency", "c-freq", { type: "number", step: "0.1", min: 70, max: 6000, value: (status.source.center_freq / 1e6).toFixed(3) }, "MHz", "freq", 1e6));
+    fields.push(add("RF gain", "c-gain", { type: "number", step: "1", min: 0, max: 89, value: Math.round(status.source.gain) }, "dB", "gain", 1));
+  } else if (kind === "sim") {
+    $("ctl-hint").textContent = "Change the simulated channel while receiving.";
+    fields.push(add("Es/N0", "c-esn0", { type: "number", step: "1", min: 0, max: 300, value: status.source.sim_esn0 }, "dB", "esn0", 1));
+    fields.push(add("Carrier offset", "c-cfo", { type: "number", step: "50", min: -20000, max: 20000, value: status.source.sim_cfo }, "Hz", "cfo", 1));
+  } else {
+    $("ctl-hint").textContent = "File input has no runtime controls.";
+    return;
+  }
+  const btn = document.createElement("button"); btn.className = "primary"; btn.textContent = "Apply";
+  btn.style.marginTop = "10px";
+  btn.addEventListener("click", async () => {
+    const body = {};
+    for (const f of fields) { const v = parseFloat(f.inp.value); if (isFinite(v)) body[f.key] = v * f.scale; }
+    const msg = $("ctl-msg"); btn.disabled = true;
+    try {
+      const r = await fetch("/api/control", { method: "POST", headers: { "Content-Type": "application/json", "X-AIW-Control": "1" }, body: JSON.stringify(body) });
+      const j = await r.json(); msg.className = "msg " + (j.ok ? "ok" : "err"); msg.textContent = j.ok ? "✓ " + j.message : "✕ " + j.message;
+    } catch (e) { msg.className = "msg err"; msg.textContent = "✕ request failed"; }
+    btn.disabled = false;
+  });
+  box.append(form, btn);
+}
+
+function renderTaps(taps) {
+  const box = $("taps"); box.replaceChildren();
+  const mags = []; for (let i = 0; i + 1 < taps.length; i += 2) mags.push(Math.hypot(taps[i], taps[i + 1]));
+  const mx = Math.max(1e-9, ...mags);
+  mags.forEach((m, i) => {
+    const d = document.createElement("div");
+    const v = document.createElement("span"); v.className = "v"; v.textContent = m.toFixed(2);
+    const bar = document.createElement("span"); bar.className = "bar"; bar.style.height = Math.max(2, 60 * m / mx) + "px";
+    const l = document.createElement("span"); l.textContent = "w" + i;
+    d.append(v, bar, l); box.appendChild(d);
+  });
+}
+
+function renderTable() {
+  const tb = $("tbl"); tb.replaceChildren();
+  for (const p of history.slice(-60).reverse()) {
+    const tr = document.createElement("tr");
+    for (const v of [fmt(p.t, 0), fmt(p.fps, 0), fmtBer(p.pre), fmtBer(p.post), fmt(p.snr), fmt(p.mer), p.cfo === null ? "–" : Math.round(p.cfo), fmt(p.lat), fmtInt(p.unc)]) {
+      const td = document.createElement("td"); td.textContent = v; tr.appendChild(td);
+    }
+    tb.appendChild(tr);
+  }
+}
+
+// ---------- polling ----------
+async function getJson(url) { const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(r.status); return r.json(); }
+async function pollStatus() {
+  try {
+    status = await getJson("/api/status"); online = true;
+    const h = await getJson("/api/history?since=" + lastT);
+    if (h.points.length) { history = history.concat(h.points).slice(-600); lastT = history[history.length - 1].t; }
+    renderStatus(); buildControls();
+    if (!paused) { drawTrends(); if ($("tbl").closest("details").open) renderTable(); }
+  } catch (e) { online = false; if (status) renderStatus(); else { $("stateText").textContent = "Disconnected"; $("state").className = "pill crit"; } }
+}
+async function pollFast() {
+  if (paused || !online) return;
+  try {
+    const c = await getJson("/api/constellation"); consPts = c.points; renderTaps(c.taps); drawConstellation(consHover);
+    const s = await getJson("/api/spectrum"); psd = s.psd_db; specFs = s.sample_rate; drawSpectrum();
+  } catch (e) { /* status poll reports connectivity */ }
+}
+$("pause").addEventListener("click", () => {
+  paused = !paused; $("pause").textContent = paused ? "Resume plots" : "Pause plots"; $("pause").setAttribute("aria-pressed", paused);
+});
+document.querySelector("details").addEventListener("toggle", renderTable);
+new ResizeObserver(() => { drawConstellation(consHover); drawSpectrum(); drawTrends(); }).observe(document.body);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawConstellation(null); drawSpectrum(); drawTrends(); });
+pollStatus(); pollFast();
+setInterval(pollStatus, 1000);
+setInterval(pollFast, 400);
+</script>
+</body>
+</html>

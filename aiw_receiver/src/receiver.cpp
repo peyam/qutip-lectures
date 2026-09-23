@@ -11,6 +11,7 @@
 #include "frame_decoder.hpp"
 #include "front_end.hpp"
 #include "snr_estimator.hpp"
+#include "spectrum.hpp"
 #include "sync_correlator.hpp"
 
 namespace aiw {
@@ -138,6 +139,9 @@ RunSummary Receiver::run(SampleSource& src, const RunOptions& opt) {
     // ---------------- Thread 5: SNR radiometer -----------------------------
     std::thread t5([&] {
         SnrEstimator snr(cfg_.sample_rate, cfg_.snr_avg_len, cfg_.snr_report_block, cfg_.snr_decimation);
+        SpectrumEstimator spec;
+        std::vector<float> psd;
+        std::size_t chunks = 0;
         Backoff bo;
         for (;;) {
             SampleChunk* in = q_snr.read_slot();
@@ -151,6 +155,13 @@ RunSummary Receiver::run(SampleSource& src, const RunOptions& opt) {
             }
             bo.reset();
             if (snr.process(in->data.data(), in->n)) m_.snr_db.store(snr.snr_db(), std::memory_order_relaxed);
+            if (opt.ui) {
+                spec.process(in->data.data(), in->n);
+                if (++chunks % 8 == 0) {  // ~20 updates/s
+                    spec.psd_db(psd);
+                    opt.ui->publish_psd(psd);
+                }
+            }
             q_snr.commit_read();
         }
         t5_done = true;
@@ -179,6 +190,7 @@ RunSummary Receiver::run(SampleSource& src, const RunOptions& opt) {
             m_.uw_mer_db.store(f->eq.uw_mer_db, std::memory_order_relaxed);
             m_.cfo_hz.store(f->eq.cfo_rad_per_sym * SYMBOL_RATE / (2.0 * PI), std::memory_order_relaxed);
             m_.eq_cond.store(f->eq.cond_estimate, std::memory_order_relaxed);
+            if (opt.ui) opt.ui->publish_frame(f->eq.data, f->eq.taps);
             q_frames.commit_write();
         };
         for (;;) {
@@ -267,6 +279,7 @@ RunSummary Receiver::run(SampleSource& src, const RunOptions& opt) {
     uint64_t prev_frames = 0, prev_pre = 0, prev_post = 0, prev_ok = 0, prev_unc = 0, prev_corr = 0, prev_lat = 0;
     uint64_t total_lat = 0;
     double max_lat_ms = 0.0;
+    double prev_t = 0.0;
 
     auto report = [&](bool final_report) {
         const double t = std::chrono::duration<double>(Clock::now() - t0).count();
@@ -306,6 +319,22 @@ RunSummary Receiver::run(SampleSource& src, const RunOptions& opt) {
                 << m_.usrp_overflows.load() << '\n'
                 << std::flush;
         }
+        if (opt.ui && !final_report) {
+            HistoryPoint h;
+            h.t = t;
+            h.frames_per_s = double(df) / std::max(1e-3, t - prev_t);
+            h.pre_ber = pre_ber;
+            h.post_ber = post_ber;
+            h.snr_db = m_.snr_db.load();
+            h.mer_db = df ? m_.uw_mer_db.load() : NAN;
+            h.cfo_hz = df ? m_.cfo_hz.load() : NAN;
+            h.lat_mean_ms = lat_mean;
+            h.lat_max_ms = df ? lat_max : NAN;
+            h.uncorrectable = double(unc - prev_unc);
+            h.rs_max = rs_max;
+            opt.ui->push_history(h);
+        }
+        prev_t = t;
         prev_frames = frames;
         prev_pre = pre;
         prev_post = post;
@@ -335,6 +364,10 @@ RunSummary Receiver::run(SampleSource& src, const RunOptions& opt) {
     t3.join();
     t4.join();
     report(true);
+    if (opt.ui) {
+        std::lock_guard lk(opt.ui->mu);
+        opt.ui->run_finished = true;
+    }
 
     sum.samples = m_.samples_in.load();
     sum.frames = m_.frames_decoded.load();

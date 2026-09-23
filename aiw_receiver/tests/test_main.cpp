@@ -12,6 +12,9 @@
 #include "agc.hpp"
 #include "circular_buffer.hpp"
 #include "constellation.hpp"
+#include "dashboard.hpp"
+#include "sample_source.hpp"
+#include "spectrum.hpp"
 #include "dc_blocker.hpp"
 #include "equalizer.hpp"
 #include "fec_reed_solomon.hpp"
@@ -377,6 +380,52 @@ void test_snr_estimator() {
     }
 }
 
+void test_spectrum() {
+    // A +300 kHz tone must peak in the fft-shifted bin for +300 kHz.
+    SpectrumEstimator spec(1024);
+    std::vector<cf32> x(8192);
+    for (std::size_t i = 0; i < x.size(); ++i)
+        x[i] = std::polar(0.5f, static_cast<float>(2 * PI * 300e3 / SAMPLE_RATE * static_cast<double>(i)));
+    for (int k = 0; k < 4; ++k) spec.process(x.data(), x.size());
+    std::vector<float> psd;
+    spec.psd_db(psd);
+    const auto peak = static_cast<std::size_t>(std::max_element(psd.begin(), psd.end()) - psd.begin());
+    const std::size_t expect = 512 + static_cast<std::size_t>(std::lround(300e3 / SAMPLE_RATE * 1024));
+    std::printf("  +300 kHz tone peak at bin %zu (expected %zu), %.1f dB\n", peak, expect, psd[peak]);
+    CHECK(peak + 1 >= expect && peak <= expect + 1);
+    CHECK(std::abs(psd[peak] - 20.0f * std::log10(0.5f)) < 2.0f);
+}
+
+void test_dashboard_api() {
+    RxConfig cfg;
+    const auto uw = default_unique_word();
+    Receiver rx(cfg, uw, GOLDEN_PAYLOAD);
+    SimSource src(std::make_unique<TxSimulator>(uw, GOLDEN_PAYLOAD, ChannelParams{}), 0);
+    UiState ui;
+    Dashboard dash(rx, src, ui, "127.0.0.1", "numpy");
+    auto req = [](std::string method, std::string path, std::string host, std::string body = "", bool hdr = false) {
+        HttpRequest r;
+        r.method = std::move(method);
+        r.path = std::move(path);
+        r.headers["host"] = std::move(host);
+        if (hdr) r.headers["x-aiw-control"] = "1";
+        r.body = std::move(body);
+        return r;
+    };
+    CHECK(dash.handle(req("GET", "/", "localhost:8080")).status == 200);
+    CHECK(dash.handle(req("GET", "/", "localhost:8080")).body.find("AIW-Rx") != std::string::npos);
+    const auto st = dash.handle(req("GET", "/api/status", "127.0.0.1:8080"));
+    CHECK(st.status == 200 && st.body.find("\"uw_length\":143") != std::string::npos);
+    CHECK(st.body.find("nan") == std::string::npos);  // NaN serialised as null
+    CHECK(dash.handle(req("GET", "/api/status", "evil.example")).status == 403);          // DNS rebinding
+    CHECK(dash.handle(req("POST", "/api/control", "localhost", "{\"esn0\":20}")).status == 403);  // no header
+    CHECK(dash.handle(req("POST", "/api/control", "localhost", "{\"freq\":915e6}", true)).status == 400);
+    CHECK(dash.handle(req("POST", "/api/control", "localhost", "{\"esn0\":-1}", true)).status == 400);
+    CHECK(dash.handle(req("POST", "/api/control", "localhost", "{\"esn0\":21.5}", true)).status == 200);
+    CHECK(std::abs(src.sim_esn0() - 21.5) < 1e-9);
+    CHECK(dash.handle(req("GET", "/nope", "localhost")).status == 404);
+}
+
 }  // namespace
 
 int main() {
@@ -390,6 +439,8 @@ int main() {
     run("frequency translation FIR", test_xlating_filter);
     run("two-pass LLS equaliser", test_equalizer_synthetic);
     run("SNR radiometer", test_snr_estimator);
+    run("spectrum estimator", test_spectrum);
+    run("dashboard API", test_dashboard_api);
     run("loopback: clean channel", test_loopback_clean);
     run("loopback: impaired channel, BER 0", test_loopback_impaired);
     run("loopback: RS correcting", test_loopback_rs_working);

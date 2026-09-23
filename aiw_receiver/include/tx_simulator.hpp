@@ -9,6 +9,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <complex>
 #include <cstdint>
 #include <deque>
@@ -39,11 +40,19 @@ public:
     // Produces the next n received samples.
     void generate(cf32* out, std::size_t n);
 
+    // Channel changes requested from another thread (e.g. the dashboard);
+    // applied at the start of the next generate() call.
+    void request_esn0_db(double v) { req_esn0_.store(v); req_pending_.store(true); }
+    void request_cfo_hz(double v) { req_cfo_.store(v); req_pending_.store(true); }
+    double esn0_db() const { return req_esn0_.load(); }
+    double cfo_hz() const { return req_cfo_.load(); }
+
     // The 216 bytes (payload + parity) sent in every frame.
     const std::array<uint8_t, CODEWORD_SIZE_SHORT>& codeword() const { return codeword_; }
     std::size_t frame_symbols() const { return frame_.size(); }
 
 private:
+    void apply_channel();    // derives noise and LO step from ch_
     void refill_baseband();  // appends one frame worth of shaped 4-sps samples
     cf32 interp(double t);   // cubic Lagrange interpolation into bb_
 
@@ -57,6 +66,9 @@ private:
     double t_step_;
     ChannelParams ch_;
     double noise_sigma_ = 0.0;
+    double shaped_energy_ = 1.0;
+    std::atomic<double> req_esn0_{0.0}, req_cfo_{0.0};
+    std::atomic<bool> req_pending_{false};
     double sig_rms_ = 1.0;
     std::size_t n_out_ = 0;
     std::complex<double> lo_{1.0, 0.0}, lo_step_{1.0, 0.0};

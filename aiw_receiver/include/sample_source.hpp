@@ -2,6 +2,7 @@
 #pragma once
 
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
@@ -24,6 +25,18 @@ public:
     virtual bool is_live() const { return false; }
     virtual std::size_t overflows() const { return 0; }
     virtual std::string describe() const = 0;
+    virtual std::string kind() const = 0;  // "usrp" | "file" | "sim"
+
+    // Runtime controls (dashboard).  Each returns false if unsupported.
+    // Called from a non-streaming thread.
+    virtual bool set_center_freq(double) { return false; }
+    virtual bool set_gain(double) { return false; }
+    virtual double center_freq() const { return NAN; }
+    virtual double gain() const { return NAN; }
+    virtual bool set_sim_esn0(double) { return false; }
+    virtual bool set_sim_cfo(double) { return false; }
+    virtual double sim_esn0() const { return NAN; }
+    virtual double sim_cfo() const { return NAN; }
 };
 
 // Raw interleaved complex float32 (GNU Radio file sink / uhd rx_samples_to_file fc32).
@@ -45,6 +58,7 @@ public:
         return n;
     }
     std::string describe() const override { return "file:" + path_ + (loop_ ? " (loop)" : ""); }
+    std::string kind() const override { return "file"; }
 
 private:
     std::string path_;
@@ -67,6 +81,11 @@ public:
         return n;
     }
     std::string describe() const override { return "simulated transmitter"; }
+    std::string kind() const override { return "sim"; }
+    bool set_sim_esn0(double v) override { tx_->request_esn0_db(v); return true; }
+    bool set_sim_cfo(double v) override { tx_->request_cfo_hz(v); return true; }
+    double sim_esn0() const override { return tx_->esn0_db(); }
+    double sim_cfo() const override { return tx_->cfo_hz(); }
 
 private:
     std::unique_ptr<TxSimulator> tx_;

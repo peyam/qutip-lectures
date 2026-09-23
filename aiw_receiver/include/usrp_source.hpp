@@ -106,6 +106,19 @@ public:
     bool is_live() const override { return true; }
     std::size_t overflows() const override { return overflows_; }
     std::string describe() const override { return "usrp:" + cfg_.device_args; }
+    std::string kind() const override { return "usrp"; }
+
+    // multi_usrp control calls are safe while another thread streams.
+    bool set_center_freq(double hz) override {
+        usrp_->set_rx_freq(uhd::tune_request_t(hz));
+        return true;
+    }
+    bool set_gain(double db) override {
+        usrp_->set_rx_gain(db);
+        return true;
+    }
+    double center_freq() const override { return usrp_->get_rx_freq(); }
+    double gain() const override { return usrp_->get_rx_gain(); }
 
 private:
     UsrpConfig cfg_;
