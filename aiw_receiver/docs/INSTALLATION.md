@@ -220,9 +220,9 @@ section.
 ### E.1 Connect the hardware
 
 ```
- AIW transmitter ──RF cable + attenuator (or antenna)──▶ B210 "RF A: RX2" (SMA)
-                                                         B210 USB 3.0 (micro-B) ──USB 3.0 cable──▶ PC USB 3.0 port
-                                                         B210 6 V DC input ◀── supplied power adapter (recommended)
+AIW transmitter ── RF cable + attenuator ──▶ B210  RF A · RX2 (SMA)
+PC USB 3.0 port ◀────── USB 3.0 cable ────── B210  USB 3.0 (micro-B)
+Mains ─────── supplied 6 V DC adapter ─────▶ B210  6 V DC input (recommended)
 ```
 
 1. **RF input:** connect the signal to the **RX2** SMA port of channel **A** (labelled *RF A*).
