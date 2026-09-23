@@ -4,7 +4,7 @@
 
 **Applies to:** `aiw_receiver/` on `master` (C++20, CMake)
 
-**Companion documents:** [Installation guide](INSTALLATION.md) · [User manual](USER_MANUAL.md)
+**Companion documents:** [Installation guide](INSTALLATION.md) · [User manual](USER_MANUAL.md) · [Capella MBSE model](../mbse/README.md)
 
 ---
 

@@ -11,6 +11,7 @@ Ettus USRP through the UHD C++ API. It has no GNU Radio or Python runtime depend
 | [Installation guide](docs/INSTALLATION.md) | Installing the prebuilt binaries or building from source (Linux, Windows), USRP setup, verification |
 | [User manual](docs/USER_MANUAL.md) | Running the receiver: options, output, CSV, dashboard, procedures, troubleshooting |
 | [Architecture](docs/ARCHITECTURE.md) | Design: threads and queues, DSP algorithms, dashboard, performance, verification, spec deviations |
+| [Capella MBSE model](mbse/README.md) | ARCADIA model (OA, SA, LA, PA, EPBS) with 16 diagrams, validated in Capella 7.0.1 |
 
 ## Build
 
